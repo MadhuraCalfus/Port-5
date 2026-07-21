@@ -1,19 +1,30 @@
-"""Tiny synchronous SQLite persistence layer.
+"""Postgres (Supabase) persistence layer.
 
-A student project doesn't need Postgres — but it does need every routed
-ticket to survive a server restart, and it needs a real audit trail (what
-did the AI decide, how confident was it, did a human correct it, how long
-did it take) to back the analytics dashboard with real numbers instead of
-made-up ones.
+Every routed ticket needs to survive a server restart, and it needs a real
+audit trail (what did the AI decide, how confident was it, did a human
+correct it, how long did it take) to back the analytics dashboard with real
+numbers instead of made-up ones. Postgres — via Supabase — gives that a
+managed home instead of a local file, which matters the moment this runs as
+more than one process or on a host with an ephemeral filesystem.
 """
+import atexit
 import json
 import os
-import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-DB_PATH = Path(os.environ.get("TICKET_DB_PATH", Path(__file__).parent.parent / "data" / "tickets.db"))
+import psycopg
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is required (a Postgres/Supabase connection string) — "
+        "see .env.example for the format and where to find it in your Supabase project."
+    )
+
 ATTACHMENTS_DIR = Path(os.environ.get("TICKET_ATTACHMENTS_PATH", Path(__file__).parent.parent / "data" / "attachments"))
 
 # Assumed average time a human agent spends reading, categorizing, and
@@ -22,13 +33,19 @@ ATTACHMENTS_DIR = Path(os.environ.get("TICKET_ATTACHMENTS_PATH", Path(__file__).
 # which records real stopwatch times instead of relying on this constant).
 ASSUMED_MANUAL_SECONDS = 90.0
 
+# One pool per process, opened lazily on first use and reused for the life of
+# the app — a network round trip to open a fresh TCP+TLS connection per query
+# is fine for a local SQLite file but not for a remote Postgres instance.
+_pool = ConnectionPool(DATABASE_URL, min_size=1, max_size=10, kwargs={"row_factory": dict_row}, open=False)
+atexit.register(_pool.close)
+
 # Every id (users.id, team_members.id, tickets.id, tickets.user_id) is a
-# plain autoincrement integer, assigned by SQLite itself — nothing in this
-# module generates ids by hand.
+# plain SERIAL integer, assigned by Postgres itself — nothing in this module
+# generates ids by hand.
 
 _TICKETS_SCHEMA = """
     CREATE TABLE IF NOT EXISTS tickets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL,
         message TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'New',
@@ -57,7 +74,7 @@ _TICKETS_SCHEMA = """
 
 _TICKET_COMMENTS_SCHEMA = """
     CREATE TABLE IF NOT EXISTS ticket_comments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         ticket_id INTEGER NOT NULL,
         author_role TEXT NOT NULL,
         author_name TEXT NOT NULL,
@@ -82,11 +99,73 @@ _TICKET_COMMENT_READS_SCHEMA = """
 # they're a distinct kind of event: AI handled it, no human/team involved.
 _SELF_RESOLVED_SCHEMA = """
     CREATE TABLE IF NOT EXISTS self_resolved (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL,
         message TEXT NOT NULL,
         summary TEXT,
         steps_json TEXT,
+        created_at TEXT NOT NULL
+    )
+"""
+
+# The PM dashboard's unified feedback log — one row per piece of customer
+# voice regardless of where it came from. source_ref points back at
+# tickets.id when source_type = 'ticket' (a ticket is mirrored here, not
+# moved — the ticket row and its routing lifecycle are untouched); it's NULL
+# for 'review'/'survey' rows, which have no other home in this app.
+# sentiment/theme/urgency/is_actionable_ticket start NULL and are filled in
+# by the AI analysis pipeline (a later phase) — this table exists first so
+# ingestion can start independently of that pipeline being built.
+_FEEDBACK_ITEMS_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS feedback_items (
+        id SERIAL PRIMARY KEY,
+        source_type TEXT NOT NULL,
+        source_ref INTEGER,
+        text TEXT NOT NULL,
+        sentiment_label TEXT,
+        sentiment_score REAL,
+        theme TEXT,
+        urgency_score REAL,
+        is_actionable_ticket INTEGER,
+        model_used TEXT,
+        mode TEXT,
+        latency_ms INTEGER,
+        created_at TEXT NOT NULL
+    )
+"""
+
+# One persisted report per (period_type, period_start) — generated on demand,
+# not recomputed on every dashboard view, so repeat views of the same period
+# show identical numbers and narrative. UNIQUE lets "regenerate this period"
+# be an upsert instead of accumulating duplicates.
+_PERIODIC_INSIGHTS_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS periodic_insights (
+        id SERIAL PRIMARY KEY,
+        period_type TEXT NOT NULL,
+        period_start TEXT NOT NULL,
+        period_end TEXT NOT NULL,
+        theme_trend_json TEXT,
+        sentiment_trend_json TEXT,
+        narrative_json TEXT,
+        model_used TEXT,
+        mode TEXT,
+        generated_at TEXT NOT NULL,
+        UNIQUE (period_type, period_start)
+    )
+"""
+
+# AI-recommended actions for improving a theme's sentiment, generated
+# alongside a periodic_insights report. Tracked with a simple done/not-done
+# status a PM can toggle — not a full workflow, just enough to show which
+# recommendations have been acted on.
+_RECOMMENDED_ACTIONS_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS recommended_actions (
+        id SERIAL PRIMARY KEY,
+        insight_id INTEGER NOT NULL,
+        theme TEXT,
+        action_text TEXT NOT NULL,
+        rationale TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
         created_at TEXT NOT NULL
     )
 """
@@ -96,18 +175,22 @@ _sandbox_user_id: int | None = None
 
 @contextmanager
 def _conn():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
+    if _pool.closed:
+        _pool.open()
+    with _pool.connection() as conn:
         yield conn
         conn.commit()
-    finally:
-        conn.close()
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _existing_columns(conn, table: str) -> set[str]:
+    rows = conn.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = %s", (table,)
+    ).fetchall()
+    return {r["column_name"] for r in rows}
 
 
 def init_db() -> None:
@@ -115,7 +198,7 @@ def init_db() -> None:
     with _conn() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
                 email TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
@@ -124,7 +207,7 @@ def init_db() -> None:
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS team_members (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
                 email TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
@@ -132,9 +215,9 @@ def init_db() -> None:
                 created_at TEXT NOT NULL
             )
         """)
-        # Added after the table already existed in some databases — SQLite
+        # Added after the table already existed in some databases — Postgres
         # can add nullable columns in place, no full-table migration needed.
-        member_cols = {row["name"] for row in conn.execute("PRAGMA table_info(team_members)").fetchall()}
+        member_cols = _existing_columns(conn, "team_members")
         if "reset_token" not in member_cols:
             conn.execute("ALTER TABLE team_members ADD COLUMN reset_token TEXT")
         if "reset_token_expires" not in member_cols:
@@ -143,45 +226,50 @@ def init_db() -> None:
         conn.execute(_TICKET_COMMENTS_SCHEMA)
         conn.execute(_TICKET_COMMENT_READS_SCHEMA)
         conn.execute(_SELF_RESOLVED_SCHEMA)
+        conn.execute(_FEEDBACK_ITEMS_SCHEMA)
+        conn.execute(_PERIODIC_INSIGHTS_SCHEMA)
+        conn.execute(_RECOMMENDED_ACTIONS_SCHEMA)
 
         # Attachment support added after ticket_comments already existed in
         # some databases — same in-place nullable-column pattern as above.
         # attachment_path is legacy (files used to live on disk); attachments
         # are now stored directly in the database as attachment_data.
-        comment_cols = {row["name"] for row in conn.execute("PRAGMA table_info(ticket_comments)").fetchall()}
+        comment_cols = _existing_columns(conn, "ticket_comments")
         for col in ("attachment_path", "attachment_name", "attachment_mime"):
             if col not in comment_cols:
                 conn.execute(f"ALTER TABLE ticket_comments ADD COLUMN {col} TEXT")
         if "attachment_data" not in comment_cols:
-            conn.execute("ALTER TABLE ticket_comments ADD COLUMN attachment_data BLOB")
+            conn.execute("ALTER TABLE ticket_comments ADD COLUMN attachment_data BYTEA")
 
         # One-time backfill: any row still pointing at an on-disk file (from
         # before attachments moved into the database) gets its bytes pulled
         # in now, so downloads keep working uniformly through attachment_data
         # regardless of when the attachment was originally uploaded.
-        for row in conn.execute(
+        rows = conn.execute(
             "SELECT id, attachment_path FROM ticket_comments WHERE attachment_path IS NOT NULL AND attachment_data IS NULL"
-        ).fetchall():
+        ).fetchall()
+        for row in rows:
             file_path = ATTACHMENTS_DIR / row["attachment_path"]
             if file_path.exists():
                 conn.execute(
-                    "UPDATE ticket_comments SET attachment_data = ? WHERE id = ?",
+                    "UPDATE ticket_comments SET attachment_data = %s WHERE id = %s",
                     (file_path.read_bytes(), row["id"]),
                 )
 
         # A placeholder account tickets can be attached to when there's no
         # real signed-up customer behind them — the Admin sandbox tools
         # (Route a Ticket / Race / Demo) classify ad-hoc text, not a real
-        # customer's submitted ticket. INSERT OR IGNORE keyed by the unique
-        # email means this only actually inserts once, ever; every later
-        # startup just looks its id back up.
+        # customer's submitted ticket. ON CONFLICT DO NOTHING keyed by the
+        # unique email means this only actually inserts once, ever; every
+        # later startup just looks its id back up.
         conn.execute(
-            "INSERT OR IGNORE INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+            """INSERT INTO users (name, email, password_hash, created_at) VALUES (%s, %s, %s, %s)
+               ON CONFLICT (email) DO NOTHING""",
             ("Admin sandbox", "sandbox@internal", "!", _now()),
         )
         _sandbox_user_id = conn.execute(
             "SELECT id FROM users WHERE email = 'sandbox@internal'"
-        ).fetchone()[0]
+        ).fetchone()["id"]
 
 
 def _sandbox_user() -> int:
@@ -194,15 +282,15 @@ def _sandbox_user() -> int:
 def create_user(name: str, email: str, password_hash: str) -> dict:
     with _conn() as conn:
         cur = conn.execute(
-            "INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+            "INSERT INTO users (name, email, password_hash, created_at) VALUES (%s, %s, %s, %s) RETURNING id",
             (name, email, password_hash, _now()),
         )
-        return {"id": cur.lastrowid, "name": name, "email": email}
+        return {"id": cur.fetchone()["id"], "name": name, "email": email}
 
 
 def get_user_by_email(email: str) -> dict | None:
     with _conn() as conn:
-        row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        row = conn.execute("SELECT * FROM users WHERE email = %s", (email,)).fetchone()
         return dict(row) if row else None
 
 
@@ -211,15 +299,15 @@ def get_user_by_email(email: str) -> dict | None:
 def create_team_member(name: str, email: str, password_hash: str, team: str) -> dict:
     with _conn() as conn:
         cur = conn.execute(
-            "INSERT INTO team_members (name, email, password_hash, team, created_at) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO team_members (name, email, password_hash, team, created_at) VALUES (%s, %s, %s, %s, %s) RETURNING id",
             (name, email, password_hash, team, _now()),
         )
-        return {"id": cur.lastrowid, "name": name, "email": email, "team": team}
+        return {"id": cur.fetchone()["id"], "name": name, "email": email, "team": team}
 
 
 def get_team_member_by_email(email: str) -> dict | None:
     with _conn() as conn:
-        row = conn.execute("SELECT * FROM team_members WHERE email = ?", (email,)).fetchone()
+        row = conn.execute("SELECT * FROM team_members WHERE email = %s", (email,)).fetchone()
         return dict(row) if row else None
 
 
@@ -231,38 +319,38 @@ def list_team_members() -> list[dict]:
 
 def get_team_member_by_id(member_id: int) -> dict | None:
     with _conn() as conn:
-        row = conn.execute("SELECT * FROM team_members WHERE id = ?", (member_id,)).fetchone()
+        row = conn.execute("SELECT * FROM team_members WHERE id = %s", (member_id,)).fetchone()
         return dict(row) if row else None
 
 
 def delete_team_member(member_id: int) -> None:
     with _conn() as conn:
-        conn.execute("DELETE FROM team_members WHERE id = ?", (member_id,))
+        conn.execute("DELETE FROM team_members WHERE id = %s", (member_id,))
 
 
 def update_team_member_password(member_id: int, password_hash: str) -> None:
     with _conn() as conn:
-        conn.execute("UPDATE team_members SET password_hash = ? WHERE id = ?", (password_hash, member_id))
+        conn.execute("UPDATE team_members SET password_hash = %s WHERE id = %s", (password_hash, member_id))
 
 
 def set_team_member_reset_token(member_id: int, token: str, expires_at: str) -> None:
     with _conn() as conn:
         conn.execute(
-            "UPDATE team_members SET reset_token = ?, reset_token_expires = ? WHERE id = ?",
+            "UPDATE team_members SET reset_token = %s, reset_token_expires = %s WHERE id = %s",
             (token, expires_at, member_id),
         )
 
 
 def get_team_member_by_reset_token(token: str) -> dict | None:
     with _conn() as conn:
-        row = conn.execute("SELECT * FROM team_members WHERE reset_token = ?", (token,)).fetchone()
+        row = conn.execute("SELECT * FROM team_members WHERE reset_token = %s", (token,)).fetchone()
         return dict(row) if row else None
 
 
 def clear_team_member_reset_token(member_id: int) -> None:
     with _conn() as conn:
         conn.execute(
-            "UPDATE team_members SET reset_token = NULL, reset_token_expires = NULL WHERE id = ?", (member_id,)
+            "UPDATE team_members SET reset_token = NULL, reset_token_expires = NULL WHERE id = %s", (member_id,)
         )
 
 
@@ -271,11 +359,10 @@ def clear_team_member_reset_token(member_id: int) -> None:
 def create_ticket(user_id: int, message: str) -> dict:
     """A brand-new, unrouted ticket submitted by a user — no AI call yet."""
     with _conn() as conn:
-        cur = conn.execute(
-            "INSERT INTO tickets (user_id, message, status, created_at) VALUES (?, ?, 'New', ?)",
+        row = conn.execute(
+            "INSERT INTO tickets (user_id, message, status, created_at) VALUES (%s, %s, 'New', %s) RETURNING *",
             (user_id, message, _now()),
-        )
-        row = conn.execute("SELECT * FROM tickets WHERE id = ?", (cur.lastrowid,)).fetchone()
+        ).fetchone()
         return _row_to_dict(row)
 
 
@@ -283,14 +370,15 @@ def save_ticket(result: dict) -> int:
     """Insert an already-fully-classified ticket — used by the Admin sandbox
     tools (Route a Ticket / Race / Demo), which classify ad-hoc text in one
     call rather than routing a real customer-submitted ticket later. Returns
-    the id SQLite assigned it."""
+    the id Postgres assigned it."""
     with _conn() as conn:
         cur = conn.execute(
             """INSERT INTO tickets (
                 user_id, message, status, category, priority, team, tone, confidence, is_ambiguous,
                 escalated, reasoning, model_used, mode, latency_ms, manual_time_seconds,
                 created_at, baseline_json, model_results_json
-            ) VALUES (?, ?, 'Routed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ) VALUES (%s, %s, 'Routed', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id""",
             (
                 _sandbox_user(), result["message"], result["category"], result["priority"],
                 result["team"], result["tone"], result["confidence"], int(result["is_ambiguous"]),
@@ -300,19 +388,19 @@ def save_ticket(result: dict) -> int:
                 json.dumps(result["model_results"]) if result.get("model_results") else None,
             ),
         )
-        return cur.lastrowid
+        return cur.fetchone()["id"]
 
 
 def apply_classification(ticket_id: int, result: dict) -> dict | None:
     """Fill in the AI classification on an existing (previously unrouted)
     ticket — what an Admin's "Route" action does. Moves status New -> Routed."""
     with _conn() as conn:
-        conn.execute(
+        row = conn.execute(
             """UPDATE tickets SET
-                status = 'Routed', category = ?, priority = ?, team = ?, tone = ?, confidence = ?,
-                is_ambiguous = ?, escalated = ?, reasoning = ?, model_used = ?, mode = ?, latency_ms = ?,
-                baseline_json = ?, model_results_json = ?
-               WHERE id = ?""",
+                status = 'Routed', category = %s, priority = %s, team = %s, tone = %s, confidence = %s,
+                is_ambiguous = %s, escalated = %s, reasoning = %s, model_used = %s, mode = %s, latency_ms = %s,
+                baseline_json = %s, model_results_json = %s
+               WHERE id = %s RETURNING *""",
             (
                 result["category"], result["priority"], result["team"], result["tone"], result["confidence"],
                 int(result["is_ambiguous"]), int(result["escalated"]), result["reasoning"], result["model_used"],
@@ -321,31 +409,30 @@ def apply_classification(ticket_id: int, result: dict) -> dict | None:
                 json.dumps(result["model_results"]) if result.get("model_results") else None,
                 ticket_id,
             ),
-        )
-        row = conn.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
+        ).fetchone()
         return _row_to_dict(row) if row else None
 
 
 def update_ticket_status(ticket_id: int, status: str) -> dict | None:
     with _conn() as conn:
-        conn.execute("UPDATE tickets SET status = ? WHERE id = ?", (status, ticket_id))
-        row = conn.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
+        row = conn.execute(
+            "UPDATE tickets SET status = %s WHERE id = %s RETURNING *", (status, ticket_id)
+        ).fetchone()
         return _row_to_dict(row) if row else None
 
 
 def save_feedback(ticket_id: int, corrected_category: str | None, corrected_priority: str | None,
                    corrected_team: str | None, note: str | None) -> dict | None:
     with _conn() as conn:
-        conn.execute(
-            """UPDATE tickets SET reviewed = 1, corrected_category = ?, corrected_priority = ?,
-               corrected_team = ?, feedback_note = ? WHERE id = ?""",
+        row = conn.execute(
+            """UPDATE tickets SET reviewed = 1, corrected_category = %s, corrected_priority = %s,
+               corrected_team = %s, feedback_note = %s WHERE id = %s RETURNING *""",
             (corrected_category, corrected_priority, corrected_team, note, ticket_id),
-        )
-        row = conn.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
+        ).fetchone()
         return _row_to_dict(row) if row else None
 
 
-def _row_to_dict(row: sqlite3.Row) -> dict:
+def _row_to_dict(row: dict) -> dict:
     d = dict(row)
     d["is_ambiguous"] = bool(d["is_ambiguous"]) if d["is_ambiguous"] is not None else None
     d["escalated"] = bool(d["escalated"]) if d["escalated"] is not None else None
@@ -357,7 +444,7 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
 
 def get_ticket(ticket_id: int) -> dict | None:
     with _conn() as conn:
-        row = conn.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
+        row = conn.execute("SELECT * FROM tickets WHERE id = %s", (ticket_id,)).fetchone()
         return _row_to_dict(row) if row else None
 
 
@@ -368,7 +455,7 @@ def get_ticket_with_user(ticket_id: int) -> dict | None:
         row = conn.execute(
             """SELECT tickets.*, users.name AS user_name, users.email AS user_email
                FROM tickets JOIN users ON tickets.user_id = users.id
-               WHERE tickets.id = ?""",
+               WHERE tickets.id = %s""",
             (ticket_id,),
         ).fetchone()
         return _row_to_dict(row) if row else None
@@ -377,7 +464,7 @@ def get_ticket_with_user(ticket_id: int) -> dict | None:
 def list_tickets(limit: int = 50, offset: int = 0) -> list[dict]:
     with _conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM tickets ORDER BY created_at DESC LIMIT ? OFFSET ?", (limit, offset)
+            "SELECT * FROM tickets ORDER BY created_at DESC LIMIT %s OFFSET %s", (limit, offset)
         ).fetchall()
         return [_row_to_dict(r) for r in rows]
 
@@ -385,7 +472,7 @@ def list_tickets(limit: int = 50, offset: int = 0) -> list[dict]:
 def list_tickets_for_user(user_id: int) -> list[dict]:
     with _conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM tickets WHERE user_id = ? ORDER BY created_at DESC", (user_id,)
+            "SELECT * FROM tickets WHERE user_id = %s ORDER BY created_at DESC", (user_id,)
         ).fetchall()
         return [_row_to_dict(r) for r in rows]
 
@@ -395,7 +482,7 @@ def list_tickets_by_status(status: str) -> list[dict]:
         rows = conn.execute(
             """SELECT tickets.*, users.name AS user_name, users.email AS user_email
                FROM tickets JOIN users ON tickets.user_id = users.id
-               WHERE tickets.status = ? ORDER BY tickets.created_at ASC""",
+               WHERE tickets.status = %s ORDER BY tickets.created_at ASC""",
             (status,),
         ).fetchall()
         return [_row_to_dict(r) for r in rows]
@@ -406,7 +493,7 @@ def list_tickets_for_team(team: str) -> list[dict]:
         rows = conn.execute(
             """SELECT tickets.*, users.name AS user_name, users.email AS user_email
                FROM tickets JOIN users ON tickets.user_id = users.id
-               WHERE tickets.team = ? AND tickets.status != 'New'
+               WHERE tickets.team = %s AND tickets.status != 'New'
                ORDER BY tickets.created_at DESC""",
             (team,),
         ).fetchall()
@@ -433,7 +520,7 @@ def list_tickets_with_user(limit: int = 200, offset: int = 0) -> list[dict]:
         rows = conn.execute(
             """SELECT tickets.*, users.name AS user_name, users.email AS user_email
                FROM tickets JOIN users ON tickets.user_id = users.id
-               ORDER BY tickets.created_at DESC LIMIT ? OFFSET ?""",
+               ORDER BY tickets.created_at DESC LIMIT %s OFFSET %s""",
             (limit, offset),
         ).fetchall()
         return [_row_to_dict(r) for r in rows]
@@ -441,18 +528,18 @@ def list_tickets_with_user(limit: int = 200, offset: int = 0) -> list[dict]:
 
 def count_tickets() -> int:
     with _conn() as conn:
-        return conn.execute("SELECT COUNT(*) FROM tickets").fetchone()[0]
+        return conn.execute("SELECT COUNT(*) AS n FROM tickets").fetchone()["n"]
 
 
 # ---- self-resolved (AI helped, customer confirmed, no ticket ever raised) --
 
 def save_self_resolved(user_id: int, message: str, summary: str | None, steps: list[str]) -> dict:
     with _conn() as conn:
-        cur = conn.execute(
-            "INSERT INTO self_resolved (user_id, message, summary, steps_json, created_at) VALUES (?, ?, ?, ?, ?)",
+        row = conn.execute(
+            """INSERT INTO self_resolved (user_id, message, summary, steps_json, created_at)
+               VALUES (%s, %s, %s, %s, %s) RETURNING *""",
             (user_id, message, summary, json.dumps(steps), _now()),
-        )
-        row = conn.execute("SELECT * FROM self_resolved WHERE id = ?", (cur.lastrowid,)).fetchone()
+        ).fetchone()
         return _self_resolved_row_to_dict(row)
 
 
@@ -462,7 +549,7 @@ def list_self_resolved(limit: int = 200, offset: int = 0) -> list[dict]:
         rows = conn.execute(
             """SELECT self_resolved.*, users.name AS user_name, users.email AS user_email
                FROM self_resolved JOIN users ON self_resolved.user_id = users.id
-               ORDER BY self_resolved.created_at DESC LIMIT ? OFFSET ?""",
+               ORDER BY self_resolved.created_at DESC LIMIT %s OFFSET %s""",
             (limit, offset),
         ).fetchall()
         return [_self_resolved_row_to_dict(r) for r in rows]
@@ -473,26 +560,70 @@ def list_self_resolved_for_user(user_id: int) -> list[dict]:
     tab, the self-service mirror of list_tickets_for_user."""
     with _conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM self_resolved WHERE user_id = ? ORDER BY created_at DESC", (user_id,)
+            "SELECT * FROM self_resolved WHERE user_id = %s ORDER BY created_at DESC", (user_id,)
         ).fetchall()
         return [_self_resolved_row_to_dict(r) for r in rows]
 
 
 def count_self_resolved() -> int:
     with _conn() as conn:
-        return conn.execute("SELECT COUNT(*) FROM self_resolved").fetchone()[0]
+        return conn.execute("SELECT COUNT(*) AS n FROM self_resolved").fetchone()["n"]
 
 
-def _self_resolved_row_to_dict(row: sqlite3.Row) -> dict:
+def _self_resolved_row_to_dict(row: dict) -> dict:
     d = dict(row)
     d["steps"] = json.loads(d.pop("steps_json")) if d.get("steps_json") else []
+    return d
+
+
+# ---- feedback items (PM insights: unified ticket/review/survey log) ------
+
+def save_feedback_item(
+    source_type: str,
+    text: str,
+    sentiment_label: str,
+    sentiment_score: float,
+    theme: str,
+    urgency_score: float,
+    is_actionable_ticket: bool | None,
+    model_used: str,
+    mode: str,
+    latency_ms: int,
+    source_ref: int | None = None,
+) -> dict:
+    with _conn() as conn:
+        row = conn.execute(
+            """INSERT INTO feedback_items (
+                source_type, source_ref, text, sentiment_label, sentiment_score, theme,
+                urgency_score, is_actionable_ticket, model_used, mode, latency_ms, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+            (
+                source_type, source_ref, text, sentiment_label, sentiment_score, theme,
+                urgency_score, int(is_actionable_ticket) if is_actionable_ticket is not None else None,
+                model_used, mode, latency_ms, _now(),
+            ),
+        ).fetchone()
+        return _feedback_item_row_to_dict(row)
+
+
+def list_feedback_items(limit: int = 100000, offset: int = 0) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM feedback_items ORDER BY created_at DESC LIMIT %s OFFSET %s", (limit, offset)
+        ).fetchall()
+        return [_feedback_item_row_to_dict(r) for r in rows]
+
+
+def _feedback_item_row_to_dict(row: dict) -> dict:
+    d = dict(row)
+    d["is_actionable_ticket"] = bool(d["is_actionable_ticket"]) if d["is_actionable_ticket"] is not None else None
     return d
 
 
 # ---- ticket comments (customer <-> team messaging on one ticket) --------
 
 # Every JSON-facing read of a comment excludes attachment_data — it's a
-# potentially large BLOB that isn't JSON-serializable anyway. Only
+# potentially large BYTEA that isn't JSON-serializable anyway. Only
 # get_ticket_comment (used solely by the file-download endpoint, which
 # returns raw bytes, never JSON) selects it.
 _COMMENT_JSON_COLUMNS = "id, ticket_id, author_role, author_name, body, created_at, attachment_name, attachment_mime"
@@ -508,14 +639,12 @@ def add_ticket_comment(
     attachment_mime: str | None = None,
 ) -> dict:
     with _conn() as conn:
-        cur = conn.execute(
-            """INSERT INTO ticket_comments
-               (ticket_id, author_role, author_name, body, created_at, attachment_data, attachment_name, attachment_mime)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (ticket_id, author_role, author_name, body, _now(), attachment_data, attachment_name, attachment_mime),
-        )
         row = conn.execute(
-            f"SELECT {_COMMENT_JSON_COLUMNS} FROM ticket_comments WHERE id = ?", (cur.lastrowid,)
+            f"""INSERT INTO ticket_comments
+               (ticket_id, author_role, author_name, body, created_at, attachment_data, attachment_name, attachment_mime)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+               RETURNING {_COMMENT_JSON_COLUMNS}""",
+            (ticket_id, author_role, author_name, body, _now(), attachment_data, attachment_name, attachment_mime),
         ).fetchone()
         return dict(row)
 
@@ -524,14 +653,14 @@ def get_ticket_comment(comment_id: int) -> dict | None:
     """Includes attachment_data — only call this from the file-download
     endpoint, never anywhere the result gets JSON-serialized."""
     with _conn() as conn:
-        row = conn.execute("SELECT * FROM ticket_comments WHERE id = ?", (comment_id,)).fetchone()
+        row = conn.execute("SELECT * FROM ticket_comments WHERE id = %s", (comment_id,)).fetchone()
         return dict(row) if row else None
 
 
 def list_ticket_comments(ticket_id: int) -> list[dict]:
     with _conn() as conn:
         rows = conn.execute(
-            f"SELECT {_COMMENT_JSON_COLUMNS} FROM ticket_comments WHERE ticket_id = ? ORDER BY created_at ASC",
+            f"SELECT {_COMMENT_JSON_COLUMNS} FROM ticket_comments WHERE ticket_id = %s ORDER BY created_at ASC",
             (ticket_id,),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -543,7 +672,7 @@ def list_ticket_comments_with_attachments(ticket_id: int) -> list[dict]:
     this; use list_ticket_comments for anything API-facing."""
     with _conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM ticket_comments WHERE ticket_id = ? ORDER BY created_at ASC", (ticket_id,)
+            "SELECT * FROM ticket_comments WHERE ticket_id = %s ORDER BY created_at ASC", (ticket_id,)
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -552,8 +681,8 @@ def mark_comments_read(ticket_id: int, viewer_role: str, viewer_key: str) -> Non
     with _conn() as conn:
         conn.execute(
             """INSERT INTO ticket_comment_reads (ticket_id, viewer_role, viewer_key, last_read_at)
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT(ticket_id, viewer_role, viewer_key) DO UPDATE SET last_read_at = excluded.last_read_at""",
+               VALUES (%s, %s, %s, %s)
+               ON CONFLICT (ticket_id, viewer_role, viewer_key) DO UPDATE SET last_read_at = EXCLUDED.last_read_at""",
             (ticket_id, viewer_role, viewer_key, _now()),
         )
 
@@ -564,18 +693,18 @@ def unread_comment_counts(ticket_ids: list[int], viewer_role: str, viewer_key: s
     if not ticket_ids:
         return {}
     with _conn() as conn:
-        placeholders = ",".join("?" for _ in ticket_ids)
+        placeholders = ",".join("%s" for _ in ticket_ids)
         last_reads = {
             row["ticket_id"]: row["last_read_at"]
             for row in conn.execute(
                 f"""SELECT ticket_id, last_read_at FROM ticket_comment_reads
-                    WHERE viewer_role = ? AND viewer_key = ? AND ticket_id IN ({placeholders})""",
+                    WHERE viewer_role = %s AND viewer_key = %s AND ticket_id IN ({placeholders})""",
                 (viewer_role, viewer_key, *ticket_ids),
             ).fetchall()
         }
         rows = conn.execute(
             f"""SELECT ticket_id, created_at FROM ticket_comments
-                WHERE ticket_id IN ({placeholders}) AND author_role != ?""",
+                WHERE ticket_id IN ({placeholders}) AND author_role != %s""",
             (*ticket_ids, viewer_role),
         ).fetchall()
         counts: dict[int, int] = {}

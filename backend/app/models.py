@@ -48,6 +48,19 @@ class TicketStatus(str, Enum):
     RESOLVED = "Resolved"
 
 
+class FeedbackSourceType(str, Enum):
+    TICKET = "ticket"
+    REVIEW = "review"
+    SURVEY = "survey"
+
+
+class SentimentLabel(str, Enum):
+    POSITIVE = "positive"
+    NEUTRAL = "neutral"
+    NEGATIVE = "negative"
+    MIXED = "mixed"
+
+
 class TicketClassification(BaseModel):
     """Schema Claude must fill in exactly — enforced via output_config.format."""
 
@@ -58,6 +71,29 @@ class TicketClassification(BaseModel):
     confidence: float = Field(ge=0, le=1, description="0-1 confidence in this classification")
     is_ambiguous: bool = Field(description="True if the ticket could reasonably fit more than one category")
     reasoning: str = Field(description="One-line explanation of the routing decision")
+
+
+class FeedbackAnalysis(BaseModel):
+    """Schema the model must fill in for the PM insights pipeline — a
+    different lens on customer voice than TicketClassification, which is
+    about routing. This is about what the feedback says: how the customer
+    feels, what it's about, how urgent it is, and whether it actually needs
+    a human to act on it at all."""
+
+    sentiment_label: SentimentLabel
+    sentiment_score: float = Field(ge=-1, le=1, description="-1 (very negative) to 1 (very positive)")
+    theme: str = Field(
+        min_length=1,
+        max_length=80,
+        description="A short, specific label for the underlying topic (e.g. 'checkout latency', "
+        "'duplicate billing charge') — never a generic bucket like 'customer issues' or 'bad experience'",
+    )
+    urgency_score: float = Field(ge=0, le=1, description="0 (no urgency) to 1 (needs immediate attention)")
+    is_actionable_ticket: bool = Field(
+        description="True if this genuinely needs a human/team to act on it as a support issue; "
+        "False if it's venting, praise, or general commentary with nothing to act on"
+    )
+    reasoning: str = Field(description="One-line explanation, specific to this item's content")
 
 
 class ResolutionSuggestion(BaseModel):
@@ -140,7 +176,7 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    role: str  # "user" | "team" | "admin"
+    role: str  # "user" | "team" | "admin" | "pm"
     name: str
     team: Optional[Team] = None
 

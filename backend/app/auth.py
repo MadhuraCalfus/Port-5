@@ -1,10 +1,12 @@
 """Password hashing, JWT issuing/verification, and role-gated FastAPI
-dependencies for the three account types: user, team member, admin.
+dependencies for the four account types: user, team member, admin, PM.
 
 There's no separate admin table (see the plan) — a single admin account is
 configured via ADMIN_EMAIL/ADMIN_PASSWORD in .env and checked directly,
 since it's not multi-account like users/team_members and never touches the
-database (so a DB leak can't expose it).
+database (so a DB leak can't expose it). PM is the same shape as admin — a
+single fixed account via PM_EMAIL/PM_PASSWORD — and deliberately not a
+role Admin can create or manage; the two are peers, not admin-of-PM.
 """
 import os
 import secrets
@@ -20,6 +22,9 @@ JWT_EXPIRES_SECONDS = 60 * 60 * 24 * 7  # 7 days
 
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@tickettrident.local")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin")
+
+PM_EMAIL = os.environ.get("PM_EMAIL", "pm@tickettrident.local")
+PM_PASSWORD = os.environ.get("PM_PASSWORD", "pm")
 
 
 def generate_reset_token() -> str:
@@ -82,4 +87,11 @@ def require_admin(request: Request) -> dict:
     claims = _decode_claims(request)
     if claims["role"] != "admin":
         raise HTTPException(status_code=403, detail="an admin account is required for this action")
+    return claims
+
+
+def require_pm(request: Request) -> dict:
+    claims = _decode_claims(request)
+    if claims["role"] != "pm":
+        raise HTTPException(status_code=403, detail="a product manager account is required for this action")
     return claims

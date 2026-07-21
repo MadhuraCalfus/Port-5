@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import analytics, auth, classifier, email_service, store, ticket_report
+from . import analytics, auth, classifier, email_service, feedback_ai, store, ticket_report
 from .models import (
     AdminAssignRequest,
     DemoRunRequest,
@@ -99,6 +99,10 @@ def login(req: LoginRequest):
     if req.email == auth.ADMIN_EMAIL and req.password == auth.ADMIN_PASSWORD:
         token = auth.create_token("admin", "admin", "Admin")
         return TokenResponse(access_token=token, role="admin", name="Admin")
+
+    if req.email == auth.PM_EMAIL and req.password == auth.PM_PASSWORD:
+        token = auth.create_token("pm", "pm", "Product Manager")
+        return TokenResponse(access_token=token, role="pm", name="Product Manager")
 
     raise HTTPException(status_code=401, detail="invalid email or password")
 
@@ -201,9 +205,28 @@ def mark_self_resolved(req: SelfResolvedRequest, claims: dict = Depends(auth.req
 
 @app.post("/api/tickets")
 def create_ticket(req: NewTicketRequest, claims: dict = Depends(auth.require_user)):
-    """A user submits a ticket. No AI call here — it stays unclassified
-    (status="New") until an Admin routes it."""
-    return store.create_ticket(user_id=int(claims["sub"]), message=req.message)
+    """A user submits a ticket. No routing AI call here — it stays
+    unclassified (status="New") until an Admin routes it. It does, however,
+    get mirrored into feedback_items right away: the PM insights pipeline
+    (sentiment/theme/urgency) runs independently of routing, on its own
+    timeline, without waiting on an Admin to ever pick this ticket up."""
+    ticket = store.create_ticket(user_id=int(claims["sub"]), message=req.message)
+    outcome = feedback_ai.analyze_feedback(req.message)
+    a = outcome.analysis
+    store.save_feedback_item(
+        source_type="ticket",
+        source_ref=ticket["id"],
+        text=req.message,
+        sentiment_label=a.sentiment_label.value,
+        sentiment_score=a.sentiment_score,
+        theme=a.theme,
+        urgency_score=a.urgency_score,
+        is_actionable_ticket=a.is_actionable_ticket,
+        model_used=outcome.model_used,
+        mode=outcome.mode,
+        latency_ms=outcome.latency_ms,
+    )
+    return ticket
 
 
 @app.get("/api/my-tickets")

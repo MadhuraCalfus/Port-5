@@ -8,7 +8,7 @@ Design notes (also covered in the README):
   wrapped it in markdown" mostly can't happen. This is the primary answer to
   "how do you handle malformed JSON" — you prevent most of it before it
   happens.
-- We still don't trust it blindly. `_extract_json` and the repair turn below
+- We still don't trust it blindly. `llm_providers.extract_json` and the repair turn below
   are a second line of defense for the cases structured outputs doesn't fully
   cover: a refusal, a truncated response (`max_tokens`), or a transient
   response that fails our own Pydantic validation (e.g. confidence outside
@@ -21,29 +21,24 @@ Design notes (also covered in the README):
   configured, `classify_ticket` uses the first as the primary result; when a
   caller asks to compare, `classify_with_all_providers` runs the *same*
   ticket through every configured provider so they can be shown side by side.
+- The multi-provider client/call/JSON-recovery plumbing itself lives in
+  `llm_providers.py`, shared with `feedback_ai.py` (the PM insights
+  pipeline) — this module only owns the ticket-routing prompt, schema, and
+  the classify/suggest orchestration built on top of that shared plumbing.
 """
 import json
-import os
-import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from pydantic import ValidationError
 
-from . import baseline
+from . import baseline, llm_providers as llm
 from .models import Category, Priority, ResolutionSuggestion, Team, Tone, TicketClassification
 
-MODEL = os.environ.get("CLAUDE_MODEL", "claude-opus-4-8")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-FORCE_MOCK = os.environ.get("FORCE_MOCK_MODE", "").strip().lower() in ("1", "true", "yes")
-
-PROVIDER_MODEL = {"anthropic": MODEL, "openai": OPENAI_MODEL, "groq": GROQ_MODEL}
-# Preference order when only one provider's answer is needed: Anthropic and
-# OpenAI both get a strict JSON Schema enforced by the API; Groq only gets
-# JSON mode, so it's the weakest guarantee and goes last.
-PROVIDER_PRIORITY = ["anthropic", "openai", "groq"]
+MODEL = llm.MODEL
+PROVIDER_MODEL = llm.PROVIDER_MODEL
+PROVIDER_PRIORITY = llm.PROVIDER_PRIORITY
 
 SYSTEM_PROMPT = """You are the triage engine for a company's support ticket routing system. \
 You read one incoming support message and decide how it should be routed.
@@ -160,106 +155,16 @@ SUGGESTION_SCHEMA = {
     "additionalProperties": False,
 }
 
-REPAIR_INSTRUCTION = (
-    "Your previous response could not be parsed as valid JSON matching the required schema. "
-    "Respond again with ONLY a single JSON object matching the schema — no markdown fences, "
-    "no commentary, no trailing text."
-)
-
-_clients: dict[str, object] = {}
-_unavailable_reasons: dict[str, str] = {}
-
-
-def _build_client(provider: str):
-    """Construct and validate credentials for a single provider. Returns the
-    client, or None (recording why in _unavailable_reasons) if that provider
-    isn't configured."""
-    try:
-        if provider == "anthropic":
-            import anthropic
-            client = anthropic.Anthropic()
-            if not (client.api_key or client.auth_token):
-                _unavailable_reasons[provider] = "ANTHROPIC_API_KEY not set"
-                return None
-            return client
-        if provider == "openai":
-            import openai
-            return openai.OpenAI()
-        if provider == "groq":
-            import groq
-            return groq.Groq()
-    except Exception as exc:  # pragma: no cover - environment dependent
-        _unavailable_reasons[provider] = str(exc)
-        return None
-    return None
-
-
-def _get_client(provider: str):
-    if FORCE_MOCK:
-        return None
-    if provider not in _clients:
-        _clients[provider] = _build_client(provider)
-    return _clients[provider]
-
-
-def _available_providers() -> list[str]:
-    """All providers with usable credentials, in preference order."""
-    return [p for p in PROVIDER_PRIORITY if _get_client(p) is not None]
-
 
 def mode_info() -> dict:
-    providers = _available_providers()
-    live = len(providers) > 0
-    primary = providers[0] if providers else None
-    if live:
-        reason = None
-    elif FORCE_MOCK:
-        reason = "FORCE_MOCK_MODE is enabled"
-    else:
-        reason = next(iter(_unavailable_reasons.values()), None) or (
-            "no ANTHROPIC_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY set"
-        )
-    return {
-        "mode": "live" if live else "mock",
-        "provider": primary,
-        "providers_available": providers,
-        "model": PROVIDER_MODEL.get(primary, "keyword-baseline"),
-        "forced_mock": FORCE_MOCK,
-        "reason": reason,
-    }
-
-
-def _extract_json(text: str) -> dict | None:
-    """Best-effort recovery of a JSON object from a (possibly messy) string.
-    Used both as defense-in-depth on real responses and by the /demo repair
-    endpoint to show the mechanism deterministically."""
-    text = text.strip()
-    # Strip ```json ... ``` or ``` ... ``` fences if present.
-    fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, re.DOTALL)
-    if fence:
-        text = fence.group(1).strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-    # Grab the first {...} block and try again (handles stray prose around it).
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        return None
-    candidate = match.group(0)
-    # Common LLM-ism: trailing comma before a closing brace/bracket.
-    candidate = re.sub(r",\s*([}\]])", r"\1", candidate)
-    try:
-        return json.loads(candidate)
-    except json.JSONDecodeError:
-        return None
+    return llm.mode_info()
 
 
 def repair_demo(broken_json: str) -> dict:
     """Deterministic demonstration of the repair path, independent of any
     live API call — lets you show a mentor exactly what happens when the
     model returns garbage, without waiting on network flakiness to trigger it."""
-    recovered = _extract_json(broken_json)
+    recovered = llm.extract_json(broken_json)
     return {
         "input": broken_json,
         "recovered": recovered,
@@ -271,78 +176,6 @@ def _escalate(priority: Priority, tone: Tone) -> tuple[Priority, bool]:
     if tone in (Tone.FRUSTRATED, Tone.ANGRY, Tone.URGENT) and priority == Priority.MEDIUM:
         return Priority.HIGH, True
     return priority, False
-
-
-def _call_anthropic(client, message: str, system_prompt: str, schema: dict, repair: bool, prior_content=None):
-    kwargs = dict(
-        model=MODEL,
-        max_tokens=1024,
-        system=system_prompt,
-        output_config={"format": {"type": "json_schema", "schema": schema}, "effort": "low"},
-    )
-    if repair and prior_content is not None:
-        kwargs["messages"] = [
-            {"role": "user", "content": message},
-            {"role": "assistant", "content": prior_content},
-            {"role": "user", "content": REPAIR_INSTRUCTION},
-        ]
-    else:
-        kwargs["messages"] = [{"role": "user", "content": message}]
-    return client.messages.create(**kwargs)
-
-
-def _call_openai(client, message: str, system_prompt: str, schema: dict, repair: bool, prior_text: str | None = None):
-    """OpenAI's chat.completions API with strict Structured Outputs — like
-    Claude, the schema itself is enforced by the API, not just requested."""
-    messages = [{"role": "system", "content": system_prompt}]
-    if repair and prior_text is not None:
-        messages += [
-            {"role": "user", "content": message},
-            {"role": "assistant", "content": prior_text},
-            {"role": "user", "content": REPAIR_INSTRUCTION},
-        ]
-    else:
-        messages.append({"role": "user", "content": message})
-    return client.chat.completions.create(
-        model=OPENAI_MODEL,
-        max_tokens=1024,
-        messages=messages,
-        response_format={
-            "type": "json_schema",
-            "json_schema": {"name": "structured_response", "schema": schema, "strict": True},
-        },
-    )
-
-
-def _call_groq(client, message: str, system_prompt: str, schema: dict, repair: bool, prior_text: str | None = None):
-    """Groq's chat.completions API — OpenAI-shaped, not Claude's Messages API.
-    Requests JSON mode rather than a strict schema (Groq's schema enforcement
-    is weaker/model-dependent), and leans on the shared _extract_json +
-    Pydantic validation + repair turn to cover the gap. Groq's JSON mode only
-    guarantees syntactically valid JSON, not conformance to `schema` — and
-    requires the word "json" somewhere in the messages — so the schema is
-    spelled out in the prompt itself here, unlike Claude/OpenAI.
-    """
-    groq_system_prompt = (
-        system_prompt
-        + "\n\nRespond with ONLY a single JSON object matching this schema, no markdown fences, "
-        "no commentary:\n" + json.dumps(schema)
-    )
-    messages = [{"role": "system", "content": groq_system_prompt}]
-    if repair and prior_text is not None:
-        messages += [
-            {"role": "user", "content": message},
-            {"role": "assistant", "content": prior_text},
-            {"role": "user", "content": REPAIR_INSTRUCTION},
-        ]
-    else:
-        messages.append({"role": "user", "content": message})
-    return client.chat.completions.create(
-        model=GROQ_MODEL,
-        max_tokens=1024,
-        messages=messages,
-        response_format={"type": "json_object"},
-    )
 
 
 @dataclass
@@ -366,39 +199,28 @@ def _baseline_as_classification(message: str) -> TicketClassification:
     )
 
 
-def _transient_errors_for(provider: str):
-    if provider == "anthropic":
-        import anthropic
-        return (anthropic.APIConnectionError, anthropic.RateLimitError, anthropic.APIStatusError)
-    if provider == "openai":
-        import openai
-        return (openai.APIConnectionError, openai.RateLimitError, openai.APIStatusError)
-    import groq
-    return (groq.APIConnectionError, groq.RateLimitError, groq.APIStatusError)
-
-
 def _run_provider(provider: str, client, message: str) -> ClassifyOutcome:
     """Run one ticket through one provider's structured-output call, with the
     shared extract/validate/repair/fallback pipeline. Used both for the
     single primary classification and for side-by-side model comparison."""
     start = time.monotonic()
     model_used = PROVIDER_MODEL[provider]
-    transient_errors = _transient_errors_for(provider)
+    transient_errors = llm.transient_errors_for(provider)
 
     try:
         if provider == "anthropic":
-            response = _call_anthropic(client, message, SYSTEM_PROMPT, TICKET_SCHEMA, repair=False)
+            response = llm.call_anthropic(client, message, SYSTEM_PROMPT, TICKET_SCHEMA, repair=False)
             if response.stop_reason == "refusal":
                 raise ValueError("model refused to classify this ticket")
             text = next((b.text for b in response.content if b.type == "text"), "")
         else:
-            call = _call_openai if provider == "openai" else _call_groq
+            call = llm.call_openai if provider == "openai" else llm.call_groq
             response = call(client, message, SYSTEM_PROMPT, TICKET_SCHEMA, repair=False)
             if response.choices[0].finish_reason == "content_filter":
                 raise ValueError("model refused to classify this ticket")
             text = response.choices[0].message.content or ""
 
-        data = _extract_json(text)
+        data = llm.extract_json(text)
         if data is None:
             raise ValueError("could not parse JSON from first response")
         classification = TicketClassification.model_validate(data)
@@ -408,14 +230,14 @@ def _run_provider(provider: str, client, message: str) -> ClassifyOutcome:
         # Repair path: give the model one chance to fix its own output.
         try:
             if provider == "anthropic":
-                repaired = _call_anthropic(client, message, SYSTEM_PROMPT, TICKET_SCHEMA, repair=True, prior_content=response.content)
+                repaired = llm.call_anthropic(client, message, SYSTEM_PROMPT, TICKET_SCHEMA, repair=True, prior_content=response.content)
                 text = next((b.text for b in repaired.content if b.type == "text"), "")
             else:
-                call = _call_openai if provider == "openai" else _call_groq
+                call = llm.call_openai if provider == "openai" else llm.call_groq
                 repaired = call(client, message, SYSTEM_PROMPT, TICKET_SCHEMA, repair=True, prior_text=response.choices[0].message.content or "")
                 text = repaired.choices[0].message.content or ""
 
-            data = _extract_json(text)
+            data = llm.extract_json(text)
             if data is None:
                 raise ValueError("repair attempt still not parseable")
             classification = TicketClassification.model_validate(data)
@@ -437,20 +259,20 @@ def classify_ticket(message: str) -> ClassifyOutcome:
     """Classify using only the single highest-priority configured provider —
     the fast, cheap path used whenever a multi-model comparison isn't asked for."""
     start = time.monotonic()
-    providers = _available_providers()
+    providers = llm.available_providers()
     if not providers:
         result = _baseline_as_classification(message)
         return ClassifyOutcome(result, "mock", "keyword-baseline", int((time.monotonic() - start) * 1000))
     provider = providers[0]
-    return _run_provider(provider, _get_client(provider), message)
+    return _run_provider(provider, llm.get_client(provider), message)
 
 
 def classify_with_all_providers(message: str) -> list[tuple[str, ClassifyOutcome]]:
     """Run the *same* ticket through every configured live provider, so their
     answers can be shown side by side. Returns [] in mock mode (nothing to
     compare)."""
-    providers = _available_providers()
-    return [(p, _run_provider(p, _get_client(p), message)) for p in providers]
+    providers = llm.available_providers()
+    return [(p, _run_provider(p, llm.get_client(p), message)) for p in providers]
 
 
 def suggest_resolution(message: str) -> dict:
@@ -460,26 +282,26 @@ def suggest_resolution(message: str) -> dict:
     model can't help, the customer just proceeds straight to raising a real
     ticket, so a single attempt with no repair turn is proportionate to how
     much this feature actually matters."""
-    providers = _available_providers()
+    providers = llm.available_providers()
     if not providers:
         return {"available": False, "can_likely_self_resolve": False, "summary": None, "steps": []}
 
     provider = providers[0]
-    client = _get_client(provider)
+    client = llm.get_client(provider)
     try:
         if provider == "anthropic":
-            response = _call_anthropic(client, message, SUGGESTION_SYSTEM_PROMPT, SUGGESTION_SCHEMA, repair=False)
+            response = llm.call_anthropic(client, message, SUGGESTION_SYSTEM_PROMPT, SUGGESTION_SCHEMA, repair=False)
             if response.stop_reason == "refusal":
                 raise ValueError("model declined to help with this")
             text = next((b.text for b in response.content if b.type == "text"), "")
         else:
-            call = _call_openai if provider == "openai" else _call_groq
+            call = llm.call_openai if provider == "openai" else llm.call_groq
             response = call(client, message, SUGGESTION_SYSTEM_PROMPT, SUGGESTION_SCHEMA, repair=False)
             if response.choices[0].finish_reason == "content_filter":
                 raise ValueError("model declined to help with this")
             text = response.choices[0].message.content or ""
 
-        data = _extract_json(text)
+        data = llm.extract_json(text)
         if data is None:
             raise ValueError("could not parse JSON from response")
         suggestion = ResolutionSuggestion.model_validate(data)
