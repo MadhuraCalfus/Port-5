@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import analytics, auth, classifier, email_service, feedback_ai, store, ticket_report
+from . import analytics, auth, classifier, email_service, feedback_ai, insights, store, ticket_report
 from .models import (
     AdminAssignRequest,
     DemoRunRequest,
@@ -565,6 +565,17 @@ def pm_import_feedback(req: FeedbackImportRequest, claims: dict = Depends(auth.r
 @app.get("/api/pm/feedback")
 def pm_list_feedback(limit: int = 200, claims: dict = Depends(auth.require_pm)):
     return {"items": store.list_feedback_items(limit=limit)}
+
+
+@app.get("/api/pm/insights")
+def pm_insights(period_type: str = "weekly", period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
+    """Theme frequency, sentiment distribution, and urgency ranking for one
+    period (defaults to the current one). Pass period_key (e.g. "2026-W29")
+    to look at a past period — compute_period_insights lists every period
+    that actually has data in its own response."""
+    if period_type not in insights.PERIOD_TYPES:
+        raise HTTPException(status_code=400, detail=f"period_type must be one of {insights.PERIOD_TYPES}")
+    return insights.compute_period_insights(period_type, period_key)
 
 
 _frontend_dist = Path(__file__).parent.parent.parent / "frontend" / "dist"
