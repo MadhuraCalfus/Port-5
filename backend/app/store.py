@@ -154,14 +154,19 @@ _PERIODIC_INSIGHTS_SCHEMA = """
     )
 """
 
-# AI-recommended actions for improving a theme's sentiment, generated
-# alongside a periodic_insights report. Tracked with a simple done/not-done
-# status a PM can toggle — not a full workflow, just enough to show which
-# recommendations have been acted on.
+# AI-recommended actions for improving a theme's sentiment. Anchored to
+# (period_type, period_key) directly rather than requiring a periodic_insights
+# row to exist first — trend-based actions (this phase) are generated before
+# the narrative-report table gets its first row (a later phase); insight_id
+# is filled in only once a report generation links the two. Tracked with a
+# simple done/not-done status a PM can toggle — not a full workflow, just
+# enough to show which recommendations have been acted on.
 _RECOMMENDED_ACTIONS_SCHEMA = """
     CREATE TABLE IF NOT EXISTS recommended_actions (
         id SERIAL PRIMARY KEY,
-        insight_id INTEGER NOT NULL,
+        period_type TEXT NOT NULL,
+        period_key TEXT NOT NULL,
+        insight_id INTEGER,
         theme TEXT,
         action_text TEXT NOT NULL,
         rationale TEXT,
@@ -229,6 +234,17 @@ def init_db() -> None:
         conn.execute(_FEEDBACK_ITEMS_SCHEMA)
         conn.execute(_PERIODIC_INSIGHTS_SCHEMA)
         conn.execute(_RECOMMENDED_ACTIONS_SCHEMA)
+
+        # recommended_actions initially shipped with insight_id NOT NULL and
+        # no period_type/period_key — corrected before this table had any
+        # real data, but a database created from that first version still
+        # needs the column added and the NOT NULL relaxed.
+        action_cols = _existing_columns(conn, "recommended_actions")
+        if "period_type" not in action_cols:
+            conn.execute("ALTER TABLE recommended_actions ADD COLUMN period_type TEXT")
+        if "period_key" not in action_cols:
+            conn.execute("ALTER TABLE recommended_actions ADD COLUMN period_key TEXT")
+        conn.execute("ALTER TABLE recommended_actions ALTER COLUMN insight_id DROP NOT NULL")
 
         # Attachment support added after ticket_comments already existed in
         # some databases — same in-place nullable-column pattern as above.
@@ -618,6 +634,36 @@ def _feedback_item_row_to_dict(row: dict) -> dict:
     d = dict(row)
     d["is_actionable_ticket"] = bool(d["is_actionable_ticket"]) if d["is_actionable_ticket"] is not None else None
     return d
+
+
+# ---- recommended actions (AI suggestions per theme, per period) ----------
+
+def save_recommended_action(period_type: str, period_key: str, theme: str | None, action_text: str, rationale: str | None) -> dict:
+    with _conn() as conn:
+        row = conn.execute(
+            """INSERT INTO recommended_actions (period_type, period_key, theme, action_text, rationale, status, created_at)
+               VALUES (%s, %s, %s, %s, %s, 'pending', %s) RETURNING *""",
+            (period_type, period_key, theme, action_text, rationale, _now()),
+        ).fetchone()
+        return dict(row)
+
+
+def list_recommended_actions(period_type: str, period_key: str) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT * FROM recommended_actions WHERE period_type = %s AND period_key = %s
+               ORDER BY created_at ASC""",
+            (period_type, period_key),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_action_status(action_id: int, status: str) -> dict | None:
+    with _conn() as conn:
+        row = conn.execute(
+            "UPDATE recommended_actions SET status = %s WHERE id = %s RETURNING *", (status, action_id)
+        ).fetchone()
+        return dict(row) if row else None
 
 
 # ---- ticket comments (customer <-> team messaging on one ticket) --------

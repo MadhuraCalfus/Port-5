@@ -96,6 +96,20 @@ class FeedbackAnalysis(BaseModel):
     reasoning: str = Field(description="One-line explanation, specific to this item's content")
 
 
+class RecommendedActionItem(BaseModel):
+    theme: str
+    action_text: str = Field(min_length=1, max_length=300, description="One concrete, specific action a product/CX team could take")
+    rationale: str = Field(min_length=1, max_length=300, description="Why this action, citing the specific trend/urgency/sentiment numbers given")
+
+
+class RecommendedActionsResult(BaseModel):
+    actions: list[RecommendedActionItem] = Field(max_length=10)
+
+
+class ActionStatusUpdateRequest(BaseModel):
+    status: str = Field(pattern="^(pending|done)$")
+
+
 class ResolutionSuggestion(BaseModel):
     """Schema the model must fill in for the customer-facing self-service
     suggestion shown before a ticket is ever created — a different shape

@@ -10,8 +10,9 @@ from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import analytics, auth, classifier, email_service, feedback_ai, insights, store, ticket_report
+from . import actions_ai, analytics, auth, classifier, email_service, feedback_ai, insights, store, ticket_report
 from .models import (
+    ActionStatusUpdateRequest,
     AdminAssignRequest,
     DemoRunRequest,
     FeedbackImportRequest,
@@ -576,6 +577,55 @@ def pm_insights(period_type: str = "weekly", period_key: str | None = None, clai
     if period_type not in insights.PERIOD_TYPES:
         raise HTTPException(status_code=400, detail=f"period_type must be one of {insights.PERIOD_TYPES}")
     return insights.compute_period_insights(period_type, period_key)
+
+
+@app.get("/api/pm/insights/trend")
+def pm_insights_trend(period_type: str = "weekly", period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
+    """Period-over-period % change per theme, plus the raw current/previous
+    aggregates it was computed from."""
+    if period_type not in insights.PERIOD_TYPES:
+        raise HTTPException(status_code=400, detail=f"period_type must be one of {insights.PERIOD_TYPES}")
+    return insights.compute_trend(period_type, period_key)
+
+
+@app.post("/api/pm/insights/actions/generate")
+def pm_generate_actions(period_type: str = "weekly", period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
+    """Recommend actions for whatever themes are worsening or already urgent
+    this period, and persist them. Safe to call repeatedly — it always
+    appends fresh recommendations rather than overwriting, so re-running
+    this after new feedback comes in doesn't erase what a PM already marked
+    done on earlier recommendations for the same period."""
+    if period_type not in insights.PERIOD_TYPES:
+        raise HTTPException(status_code=400, detail=f"period_type must be one of {insights.PERIOD_TYPES}")
+    trend = insights.compute_trend(period_type, period_key)
+    recommended = actions_ai.recommend_actions(trend)
+    saved = [
+        store.save_recommended_action(
+            period_type=trend["period_type"],
+            period_key=trend["current_period_key"],
+            theme=a["theme"],
+            action_text=a["action_text"],
+            rationale=a["rationale"],
+        )
+        for a in recommended
+    ]
+    return {"period_type": trend["period_type"], "period_key": trend["current_period_key"], "actions": saved}
+
+
+@app.get("/api/pm/insights/actions")
+def pm_list_actions(period_type: str = "weekly", period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
+    if period_type not in insights.PERIOD_TYPES:
+        raise HTTPException(status_code=400, detail=f"period_type must be one of {insights.PERIOD_TYPES}")
+    key = period_key or insights.current_period_key(period_type)
+    return {"period_type": period_type, "period_key": key, "actions": store.list_recommended_actions(period_type, key)}
+
+
+@app.patch("/api/pm/insights/actions/{action_id}")
+def pm_update_action_status(action_id: int, req: ActionStatusUpdateRequest, claims: dict = Depends(auth.require_pm)):
+    action = store.update_action_status(action_id, req.status)
+    if not action:
+        raise HTTPException(status_code=404, detail="action not found")
+    return action
 
 
 _frontend_dist = Path(__file__).parent.parent.parent / "frontend" / "dist"

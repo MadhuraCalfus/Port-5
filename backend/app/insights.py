@@ -57,6 +57,24 @@ def current_period_key(period_type: str, now: datetime | None = None) -> str:
     return _period_key(now.isoformat(), period_type)
 
 
+def _previous_period_key(period_type: str, period_key: str) -> str:
+    """The immediately preceding period of the same type — handles
+    month-length variance correctly by shifting from the period's start
+    date (always the 1st for monthly) rather than a fixed day count."""
+    start, _ = _period_bounds(period_type, period_key)
+    start_dt = datetime.strptime(start, "%Y-%m-%d")
+    if period_type == "daily":
+        shifted = start_dt - timedelta(days=1)
+    elif period_type == "weekly":
+        shifted = start_dt - timedelta(days=7)
+    elif period_type == "monthly":
+        shifted = start_dt - timedelta(days=1)  # last day of the previous month
+    elif period_type == "yearly":
+        shifted = start_dt.replace(year=start_dt.year - 1)
+    else:
+        raise ValueError(f"period_type must be one of {PERIOD_TYPES}, got {period_type!r}")
+    return _period_key(shifted.isoformat(), period_type)
+
 
 def _group_by_period(rows: list[dict], period_type: str) -> dict[str, list[dict]]:
     grouped: dict[str, list[dict]] = {}
@@ -126,4 +144,49 @@ def compute_period_insights(period_type: str, period_key: str | None = None) -> 
         "theme_frequency": _theme_frequency(period_rows),
         "theme_urgency_ranking": _theme_urgency_ranking(period_rows),
         "available_periods": sorted(grouped.keys(), reverse=True),
+    }
+
+
+def compute_trend(period_type: str, period_key: str | None = None) -> dict:
+    """Period-over-period change per theme — the up/down deltas a PM sees
+    on the trends tab. A theme with 0 occurrences last period and >0 this
+    period is "new" (a % change isn't meaningful); the reverse is "resolved"."""
+    current = compute_period_insights(period_type, period_key)
+    prev_key = _previous_period_key(period_type, current["period_key"])
+    previous = compute_period_insights(period_type, prev_key)
+
+    theme_deltas = []
+    for theme in set(current["theme_frequency"]) | set(previous["theme_frequency"]):
+        cur_count = current["theme_frequency"].get(theme, 0)
+        prev_count = previous["theme_frequency"].get(theme, 0)
+        if prev_count == 0:
+            direction, delta_pct = "new", None
+        elif cur_count == 0:
+            direction, delta_pct = "resolved", -100.0
+        else:
+            delta_pct = round(100 * (cur_count - prev_count) / prev_count, 1)
+            direction = "up" if delta_pct > 0 else "down" if delta_pct < 0 else "flat"
+        theme_deltas.append({
+            "theme": theme,
+            "current_count": cur_count,
+            "previous_count": prev_count,
+            "delta_pct": delta_pct,
+            "direction": direction,
+        })
+    # "new" themes (delta_pct=None) surface first — an unseen-before theme is
+    # at least as noteworthy as a large percentage swing on an existing one.
+    theme_deltas.sort(key=lambda d: (d["delta_pct"] is None, d["delta_pct"] or 0, d["current_count"]), reverse=True)
+
+    return {
+        "period_type": period_type,
+        "current_period_key": current["period_key"],
+        "previous_period_key": prev_key,
+        "current_period_start": current["period_start"],
+        "current_period_end": current["period_end"],
+        "avg_sentiment_score_delta": round(current["avg_sentiment_score"] - previous["avg_sentiment_score"], 2),
+        "avg_urgency_score_delta": round(current["avg_urgency_score"] - previous["avg_urgency_score"], 2),
+        "total_items_delta": current["total_items"] - previous["total_items"],
+        "theme_deltas": theme_deltas,
+        "current": current,
+        "previous": previous,
     }
