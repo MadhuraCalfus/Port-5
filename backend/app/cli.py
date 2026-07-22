@@ -4,6 +4,7 @@
 Usage:
     python -m app.cli route "The app keeps crashing when I upload a photo"
     python -m app.cli demo              # run all 30 bundled sample tickets
+    python -m app.cli eval-feedback     # accuracy over the hand-labeled feedback sample set
     python -m app.cli health
 """
 import argparse
@@ -16,7 +17,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from . import classifier, store
+from . import classifier, feedback_eval, store
 from .sample_tickets import SAMPLE_TICKETS
 
 RESET = "\033[0m"
@@ -75,6 +76,30 @@ def cmd_health(args) -> None:
     print(json.dumps(info, indent=2))
 
 
+def cmd_eval_feedback(args) -> None:
+    """Runs feedback_ai against the hand-labeled samples in
+    sample_feedback.py and reports accuracy — a rehearsal for a mentor's
+    blind-input test, not something that touches the real database."""
+    results = feedback_eval.run_eval()
+    for r in results:
+        ok = "✓" if (r.sentiment_correct and r.actionable_correct and r.theme_correct) else "✗"
+        print(f"{ok} {BOLD}[{r.tag}]{RESET} {r.text[:60]!r}")
+        sent_mark = "✓" if r.sentiment_correct else "✗"
+        act_mark = "✓" if r.actionable_correct else "✗"
+        theme_mark = "✓" if r.theme_correct else "✗"
+        print(f"    sentiment {sent_mark} expected={r.expected_sentiment} actual={r.actual_sentiment}")
+        print(f"    actionable {act_mark} expected={r.expected_actionable} actual={r.actual_actionable}")
+        print(f"    theme {theme_mark} actual={r.actual_theme!r} (looking for one of {r.theme_keywords})")
+        print(f"    {DIM}mode={r.mode} latency={r.latency_ms}ms{RESET}\n")
+
+    summary = feedback_eval.summarize(results)
+    print(f"{BOLD}--- summary over {summary['total']} samples ---{RESET}")
+    print(f"Sentiment accuracy:  {summary['sentiment_accuracy']}%")
+    print(f"Actionable accuracy: {summary['actionable_accuracy']}%")
+    print(f"Theme accuracy:      {summary['theme_accuracy']}%")
+    print(f"All three correct:   {summary['all_three_correct']}%")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="tickettrident", description="TicketTrident CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -90,6 +115,9 @@ def main() -> None:
 
     p_health = sub.add_parser("health", help="Show whether live Claude or mock mode is active")
     p_health.set_defaults(func=cmd_health)
+
+    p_eval_feedback = sub.add_parser("eval-feedback", help="Run feedback_ai against the hand-labeled sample set and report accuracy")
+    p_eval_feedback.set_defaults(func=cmd_eval_feedback)
 
     args = parser.parse_args()
     args.func(args)
