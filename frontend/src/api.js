@@ -100,6 +100,9 @@ export const api = {
 
   mySelfResolved: () => request("/my-self-resolved"),
 
+  submitSurvey: (rating, comment) =>
+    request("/surveys", { method: "POST", body: JSON.stringify({ rating, comment: comment || null }) }),
+
   // ---- ticket comments (customer <-> team, shared by whichever role owns the ticket) ----
   ticketComments: (id) => request(`/tickets/${id}/comments`),
 

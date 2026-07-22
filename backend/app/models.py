@@ -201,6 +201,15 @@ class NewTicketRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
 
 
+class SurveyRequest(BaseModel):
+    """A customer's quick CSAT-style survey response — always analyzed by
+    feedback_ai and logged to feedback_items, entirely separate from the
+    ticket lifecycle (no team, no status, nothing to route)."""
+
+    rating: int = Field(ge=1, le=5, description="1 (very unhappy) to 5 (very happy)")
+    comment: Optional[str] = Field(default=None, max_length=2000)
+
+
 class SelfResolvedRequest(BaseModel):
     """Logged when a customer confirms the AI's self-service suggestion
     solved their issue — no ticket is ever created for these, but an Admin

@@ -22,6 +22,7 @@ from .models import (
     RouteRequest,
     SelfResolvedRequest,
     SignupRequest,
+    SurveyRequest,
     TeamMemberCreateRequest,
     TicketCommentRequest,
     TicketStatusUpdateRequest,
@@ -203,20 +204,17 @@ def mark_self_resolved(req: SelfResolvedRequest, claims: dict = Depends(auth.req
     return store.save_self_resolved(int(claims["sub"]), req.message, req.summary, req.steps)
 
 
-@app.post("/api/tickets")
-def create_ticket(req: NewTicketRequest, claims: dict = Depends(auth.require_user)):
-    """A user submits a ticket. No routing AI call here — it stays
-    unclassified (status="New") until an Admin routes it. It does, however,
-    get mirrored into feedback_items right away: the PM insights pipeline
-    (sentiment/theme/urgency) runs independently of routing, on its own
-    timeline, without waiting on an Admin to ever pick this ticket up."""
-    ticket = store.create_ticket(user_id=int(claims["sub"]), message=req.message)
-    outcome = feedback_ai.analyze_feedback(req.message)
+def _analyze_and_log_feedback(source_type: str, text: str, source_ref: int | None = None) -> None:
+    """Run the PM insights pipeline on one piece of customer voice and log
+    it to feedback_items — shared by every ingestion path (ticket creation,
+    survey submission, and later review import) so they all feed the same
+    unified table the same way."""
+    outcome = feedback_ai.analyze_feedback(text)
     a = outcome.analysis
     store.save_feedback_item(
-        source_type="ticket",
-        source_ref=ticket["id"],
-        text=req.message,
+        source_type=source_type,
+        source_ref=source_ref,
+        text=text,
         sentiment_label=a.sentiment_label.value,
         sentiment_score=a.sentiment_score,
         theme=a.theme,
@@ -226,7 +224,29 @@ def create_ticket(req: NewTicketRequest, claims: dict = Depends(auth.require_use
         mode=outcome.mode,
         latency_ms=outcome.latency_ms,
     )
+
+
+@app.post("/api/tickets")
+def create_ticket(req: NewTicketRequest, claims: dict = Depends(auth.require_user)):
+    """A user submits a ticket. No routing AI call here — it stays
+    unclassified (status="New") until an Admin routes it. It does, however,
+    get mirrored into feedback_items right away: the PM insights pipeline
+    (sentiment/theme/urgency) runs independently of routing, on its own
+    timeline, without waiting on an Admin to ever pick this ticket up."""
+    ticket = store.create_ticket(user_id=int(claims["sub"]), message=req.message)
+    _analyze_and_log_feedback("ticket", req.message, source_ref=ticket["id"])
     return ticket
+
+
+@app.post("/api/surveys")
+def submit_survey(req: SurveyRequest, claims: dict = Depends(auth.require_user)):
+    """A quick CSAT-style survey response — entirely separate from the
+    ticket lifecycle (no team, no status, nothing to route). Always logged
+    to feedback_items for the PM dashboard; there is no other consumer of
+    this data, so there's nothing to return beyond an acknowledgement."""
+    text = f"Survey rating: {req.rating}/5." + (f" Comment: {req.comment}" if req.comment else " No comment provided.")
+    _analyze_and_log_feedback("survey", text)
+    return {"message": "thank you for your feedback"}
 
 
 @app.get("/api/my-tickets")
