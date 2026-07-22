@@ -110,6 +110,17 @@ class ActionStatusUpdateRequest(BaseModel):
     status: str = Field(pattern="^(pending|done)$")
 
 
+class NarrativeReport(BaseModel):
+    """The plain-language periodic report — meant to be readable by anyone,
+    not just the PM who generated it (a VP of CX, an exec skimming a
+    deck)."""
+
+    headline: str = Field(min_length=1, max_length=140, description="One sentence: the single most important thing that happened this period")
+    key_findings: list[str] = Field(min_length=1, max_length=6, description="3-6 short, specific findings — not generic filler")
+    narrative: str = Field(min_length=1, max_length=1200, description="A short plain-language paragraph explaining what happened and why it matters")
+    bottom_line: str = Field(min_length=1, max_length=300, description="The single most actionable takeaway — what to do first")
+
+
 class ResolutionSuggestion(BaseModel):
     """Schema the model must fill in for the customer-facing self-service
     suggestion shown before a ticket is ever created — a different shape

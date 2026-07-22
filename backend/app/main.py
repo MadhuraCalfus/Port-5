@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import actions_ai, analytics, auth, classifier, email_service, feedback_ai, insights, store, ticket_report
+from . import actions_ai, analytics, auth, classifier, email_service, feedback_ai, insights, narrative_ai, store, ticket_report
 from .models import (
     ActionStatusUpdateRequest,
     AdminAssignRequest,
@@ -626,6 +626,49 @@ def pm_update_action_status(action_id: int, req: ActionStatusUpdateRequest, clai
     if not action:
         raise HTTPException(status_code=404, detail="action not found")
     return action
+
+
+@app.post("/api/pm/insights/report/generate")
+def pm_generate_report(period_type: str = "weekly", period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
+    """Generate (or regenerate) the plain-language report for one period and
+    persist it — an upsert, so calling this again after new feedback comes
+    in replaces the report rather than accumulating duplicates. Also links
+    any recommended_actions already generated for this period that weren't
+    yet linked to a report."""
+    if period_type not in insights.PERIOD_TYPES:
+        raise HTTPException(status_code=400, detail=f"period_type must be one of {insights.PERIOD_TYPES}")
+    trend = insights.compute_trend(period_type, period_key)
+    report, mode, model_used = narrative_ai.generate_report(trend)
+    saved = store.upsert_periodic_insight(
+        period_type=trend["period_type"],
+        period_key=trend["current_period_key"],
+        period_start=trend["current_period_start"],
+        period_end=trend["current_period_end"],
+        theme_trend=trend["theme_deltas"],
+        sentiment_trend={
+            "avg_sentiment_score": trend["current"]["avg_sentiment_score"],
+            "avg_sentiment_score_delta": trend["avg_sentiment_score_delta"],
+            "avg_urgency_score": trend["current"]["avg_urgency_score"],
+            "avg_urgency_score_delta": trend["avg_urgency_score_delta"],
+            "sentiment_distribution": trend["current"]["sentiment_distribution"],
+        },
+        narrative=report,
+        model_used=model_used,
+        mode=mode,
+    )
+    store.link_actions_to_insight(trend["period_type"], trend["current_period_key"], saved["id"])
+    return saved
+
+
+@app.get("/api/pm/insights/report")
+def pm_get_report(period_type: str = "weekly", period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
+    if period_type not in insights.PERIOD_TYPES:
+        raise HTTPException(status_code=400, detail=f"period_type must be one of {insights.PERIOD_TYPES}")
+    key = period_key or insights.current_period_key(period_type)
+    report = store.get_periodic_insight(period_type, key)
+    if not report:
+        raise HTTPException(status_code=404, detail="no report generated for this period yet")
+    return report
 
 
 _frontend_dist = Path(__file__).parent.parent.parent / "frontend" / "dist"

@@ -134,7 +134,7 @@ _FEEDBACK_ITEMS_SCHEMA = """
     )
 """
 
-# One persisted report per (period_type, period_start) — generated on demand,
+# One persisted report per (period_type, period_key) — generated on demand,
 # not recomputed on every dashboard view, so repeat views of the same period
 # show identical numbers and narrative. UNIQUE lets "regenerate this period"
 # be an upsert instead of accumulating duplicates.
@@ -142,6 +142,7 @@ _PERIODIC_INSIGHTS_SCHEMA = """
     CREATE TABLE IF NOT EXISTS periodic_insights (
         id SERIAL PRIMARY KEY,
         period_type TEXT NOT NULL,
+        period_key TEXT NOT NULL,
         period_start TEXT NOT NULL,
         period_end TEXT NOT NULL,
         theme_trend_json TEXT,
@@ -150,7 +151,7 @@ _PERIODIC_INSIGHTS_SCHEMA = """
         model_used TEXT,
         mode TEXT,
         generated_at TEXT NOT NULL,
-        UNIQUE (period_type, period_start)
+        UNIQUE (period_type, period_key)
     )
 """
 
@@ -245,6 +246,19 @@ def init_db() -> None:
         if "period_key" not in action_cols:
             conn.execute("ALTER TABLE recommended_actions ADD COLUMN period_key TEXT")
         conn.execute("ALTER TABLE recommended_actions ALTER COLUMN insight_id DROP NOT NULL")
+
+        # periodic_insights initially shipped keyed on (period_type,
+        # period_start) with no period_key column — corrected before this
+        # table had any real data, but a database created from that first
+        # version still needs the column added and re-keyed.
+        insight_cols = _existing_columns(conn, "periodic_insights")
+        if "period_key" not in insight_cols:
+            conn.execute("ALTER TABLE periodic_insights ADD COLUMN period_key TEXT")
+            conn.execute("UPDATE periodic_insights SET period_key = period_start WHERE period_key IS NULL")
+            conn.execute(
+                "ALTER TABLE periodic_insights ADD CONSTRAINT periodic_insights_period_type_period_key_key "
+                "UNIQUE (period_type, period_key)"
+            )
 
         # Attachment support added after ticket_comments already existed in
         # some databases — same in-place nullable-column pattern as above.
@@ -664,6 +678,70 @@ def update_action_status(action_id: int, status: str) -> dict | None:
             "UPDATE recommended_actions SET status = %s WHERE id = %s RETURNING *", (status, action_id)
         ).fetchone()
         return dict(row) if row else None
+
+
+def link_actions_to_insight(period_type: str, period_key: str, insight_id: int) -> None:
+    """Back-fills insight_id on whatever recommended_actions were generated
+    for this period before a report existed to link them to (actions can be
+    generated independently of a report — see recommended_actions' schema
+    comment). Only touches rows that aren't already linked, so re-generating
+    a report doesn't reassign actions that already point at an older one."""
+    with _conn() as conn:
+        conn.execute(
+            """UPDATE recommended_actions SET insight_id = %s
+               WHERE period_type = %s AND period_key = %s AND insight_id IS NULL""",
+            (insight_id, period_type, period_key),
+        )
+
+
+# ---- periodic insights (persisted daily/weekly/monthly/yearly reports) ---
+
+def upsert_periodic_insight(
+    period_type: str,
+    period_key: str,
+    period_start: str,
+    period_end: str,
+    theme_trend: dict,
+    sentiment_trend: dict,
+    narrative: dict,
+    model_used: str,
+    mode: str,
+) -> dict:
+    with _conn() as conn:
+        row = conn.execute(
+            """INSERT INTO periodic_insights (
+                period_type, period_key, period_start, period_end, theme_trend_json,
+                sentiment_trend_json, narrative_json, model_used, mode, generated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (period_type, period_key) DO UPDATE SET
+                period_start = EXCLUDED.period_start, period_end = EXCLUDED.period_end,
+                theme_trend_json = EXCLUDED.theme_trend_json, sentiment_trend_json = EXCLUDED.sentiment_trend_json,
+                narrative_json = EXCLUDED.narrative_json, model_used = EXCLUDED.model_used,
+                mode = EXCLUDED.mode, generated_at = EXCLUDED.generated_at
+            RETURNING *""",
+            (
+                period_type, period_key, period_start, period_end, json.dumps(theme_trend),
+                json.dumps(sentiment_trend), json.dumps(narrative), model_used, mode, _now(),
+            ),
+        ).fetchone()
+        return _periodic_insight_row_to_dict(row)
+
+
+def get_periodic_insight(period_type: str, period_key: str) -> dict | None:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM periodic_insights WHERE period_type = %s AND period_key = %s",
+            (period_type, period_key),
+        ).fetchone()
+        return _periodic_insight_row_to_dict(row) if row else None
+
+
+def _periodic_insight_row_to_dict(row: dict) -> dict:
+    d = dict(row)
+    d["theme_trend"] = json.loads(d.pop("theme_trend_json")) if d.get("theme_trend_json") else None
+    d["sentiment_trend"] = json.loads(d.pop("sentiment_trend_json")) if d.get("sentiment_trend_json") else None
+    d["narrative"] = json.loads(d.pop("narrative_json")) if d.get("narrative_json") else None
+    return d
 
 
 # ---- ticket comments (customer <-> team messaging on one ticket) --------
