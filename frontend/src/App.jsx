@@ -8,6 +8,7 @@ import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { UserDashboard } from "./pages/user/UserDashboard";
 import { TeamDashboard } from "./pages/team/TeamDashboard";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
+import { PmDashboard } from "./pages/pm/PmDashboard";
 
 function HomeRedirect() {
   const { auth } = useAuth();
@@ -43,6 +44,14 @@ function AppRoutes() {
         element={
           <RequireRole role="admin">
             <AdminDashboard />
+          </RequireRole>
+        }
+      />
+      <Route
+        path="/pm"
+        element={
+          <RequireRole role="pm">
+            <PmDashboard />
           </RequireRole>
         }
       />

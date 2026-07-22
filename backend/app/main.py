@@ -14,6 +14,7 @@ from . import analytics, auth, classifier, email_service, feedback_ai, store, ti
 from .models import (
     AdminAssignRequest,
     DemoRunRequest,
+    FeedbackImportRequest,
     FeedbackRequest,
     ForgotPasswordRequest,
     LoginRequest,
@@ -541,6 +542,29 @@ def repair_example(claims: dict = Depends(auth.require_admin)):
         '{"category": "Security Concern" "priority": "High" "team": "Security Team"}',
     ]
     return {"examples": [classifier.repair_demo(e) for e in broken_examples]}
+
+
+# ---- pm: feedback insights ------------------------------------------------
+
+@app.post("/api/pm/feedback/import")
+def pm_import_feedback(req: FeedbackImportRequest, claims: dict = Depends(auth.require_pm)):
+    """Batch-import reviews/surveys pasted in one go — the only way this
+    kind of customer voice gets into the system, since there's no other
+    product surface for it. Blank lines are skipped rather than logged as
+    empty feedback."""
+    imported = 0
+    for raw in req.items:
+        text = raw.strip()
+        if not text:
+            continue
+        _analyze_and_log_feedback(req.source_type.value, text)
+        imported += 1
+    return {"imported": imported, "skipped": len(req.items) - imported}
+
+
+@app.get("/api/pm/feedback")
+def pm_list_feedback(limit: int = 200, claims: dict = Depends(auth.require_pm)):
+    return {"items": store.list_feedback_items(limit=limit)}
 
 
 _frontend_dist = Path(__file__).parent.parent.parent / "frontend" / "dist"

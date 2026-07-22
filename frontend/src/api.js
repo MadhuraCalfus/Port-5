@@ -147,6 +147,12 @@ export const api = {
 
   adminDeleteTeamMember: (id) => request(`/admin/team-members/${id}`, { method: "DELETE" }),
 
+  // ---- pm: feedback insights ----
+  pmImportFeedback: (sourceType, items) =>
+    request("/pm/feedback/import", { method: "POST", body: JSON.stringify({ source_type: sourceType, items }) }),
+
+  pmFeedback: (limit = 200) => request(`/pm/feedback?limit=${limit}`),
+
   // ---- team ----
   teamTickets: () => request("/team/tickets"),
 

@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Category(str, Enum):
@@ -199,6 +199,23 @@ class ResetPasswordRequest(BaseModel):
 
 class NewTicketRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
+
+
+class FeedbackImportRequest(BaseModel):
+    """PM-side batch import for customer voice that has no other way into
+    this app — external reviews or survey exports pasted in one go, one
+    item per line. Tickets are never imported this way; they arrive
+    automatically via ticket creation."""
+
+    source_type: FeedbackSourceType
+    items: list[str] = Field(min_length=1, max_length=500)
+
+    @field_validator("source_type")
+    @classmethod
+    def _not_ticket(cls, v: FeedbackSourceType) -> FeedbackSourceType:
+        if v == FeedbackSourceType.TICKET:
+            raise ValueError("tickets are ingested automatically, not imported")
+        return v
 
 
 class SurveyRequest(BaseModel):

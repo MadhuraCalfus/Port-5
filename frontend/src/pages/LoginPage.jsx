@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import clsx from "clsx";
-import { LogIn, Moon, Shield, Sun, User, Users } from "lucide-react";
+import { LineChart, LogIn, Moon, Shield, Sun, User, Users } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../hooks/useTheme";
 import { AuthFloatingIcons } from "../components/AuthFloatingIcons";
@@ -11,6 +11,7 @@ const ROLE_TABS = [
   { id: "user", label: "Customer", icon: User, hint: "Submit tickets and track their status." },
   { id: "team", label: "Team", icon: Users, hint: "Work the tickets assigned to your team." },
   { id: "admin", label: "Admin", icon: Shield, hint: "Route tickets and manage the system." },
+  { id: "pm", label: "PM", icon: LineChart, hint: "See customer voice trends and act on them." },
 ];
 
 export function LoginPage() {
@@ -63,7 +64,7 @@ export function LoginPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] p-1">
+        <div className="grid grid-cols-4 gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] p-1">
           {ROLE_TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
