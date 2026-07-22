@@ -156,6 +156,9 @@ export const api = {
   pmInsights: (periodType = "weekly", periodKey) =>
     request(`/pm/insights?period_type=${periodType}${periodKey ? `&period_key=${periodKey}` : ""}`),
 
+  pmTrend: (periodType = "weekly", periodKey) =>
+    request(`/pm/insights/trend?period_type=${periodType}${periodKey ? `&period_key=${periodKey}` : ""}`),
+
   // ---- team ----
   teamTickets: () => request("/team/tickets"),
 
