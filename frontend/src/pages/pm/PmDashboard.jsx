@@ -1,16 +1,17 @@
 import { useState } from "react";
-import { LayoutDashboard, TrendingUp, Upload } from "lucide-react";
+import { FileText, LayoutDashboard, TrendingUp, Upload } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import { useTheme } from "../../hooks/useTheme";
 import { Header } from "../../components/Header";
 import { OverviewPage } from "./OverviewPage";
 import { ThemesTrendsPage } from "./ThemesTrendsPage";
+import { ReportsActionsPage } from "./ReportsActionsPage";
 import { ImportFeedbackPage } from "./ImportFeedbackPage";
 
-// Reports/actions tabs land in later phases, added to this same TABS list.
 const TABS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "themes", label: "Themes & Trends", icon: TrendingUp },
+  { id: "reports", label: "Reports & Actions", icon: FileText },
   { id: "import", label: "Import Feedback", icon: Upload },
 ];
 
@@ -33,6 +34,7 @@ export function PmDashboard() {
       <main className="mx-auto max-w-6xl px-4 py-8">
         {tab === "overview" && <OverviewPage />}
         {tab === "themes" && <ThemesTrendsPage />}
+        {tab === "reports" && <ReportsActionsPage />}
         {tab === "import" && <ImportFeedbackPage />}
       </main>
     </div>

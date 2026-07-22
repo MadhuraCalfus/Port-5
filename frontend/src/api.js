@@ -159,6 +159,21 @@ export const api = {
   pmTrend: (periodType = "weekly", periodKey) =>
     request(`/pm/insights/trend?period_type=${periodType}${periodKey ? `&period_key=${periodKey}` : ""}`),
 
+  pmGetReport: (periodType = "weekly", periodKey) =>
+    request(`/pm/insights/report?period_type=${periodType}${periodKey ? `&period_key=${periodKey}` : ""}`),
+
+  pmGenerateReport: (periodType = "weekly", periodKey) =>
+    request(`/pm/insights/report/generate?period_type=${periodType}${periodKey ? `&period_key=${periodKey}` : ""}`, { method: "POST" }),
+
+  pmListActions: (periodType = "weekly", periodKey) =>
+    request(`/pm/insights/actions?period_type=${periodType}${periodKey ? `&period_key=${periodKey}` : ""}`),
+
+  pmGenerateActions: (periodType = "weekly", periodKey) =>
+    request(`/pm/insights/actions/generate?period_type=${periodType}${periodKey ? `&period_key=${periodKey}` : ""}`, { method: "POST" }),
+
+  pmUpdateActionStatus: (id, status) =>
+    request(`/pm/insights/actions/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+
   // ---- team ----
   teamTickets: () => request("/team/tickets"),
 
