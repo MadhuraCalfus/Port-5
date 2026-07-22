@@ -153,6 +153,9 @@ export const api = {
 
   pmFeedback: (limit = 200) => request(`/pm/feedback?limit=${limit}`),
 
+  pmInsights: (periodType = "weekly", periodKey) =>
+    request(`/pm/insights?period_type=${periodType}${periodKey ? `&period_key=${periodKey}` : ""}`),
+
   // ---- team ----
   teamTickets: () => request("/team/tickets"),
 
