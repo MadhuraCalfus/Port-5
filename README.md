@@ -8,12 +8,49 @@ Built for **Port·04 — The Senate of Gods**.
 
 ---
 
-## Why this exists
+## Problem statement
 
 Support teams drown in tickets because triage is repetitive, low-judgment work that still requires reading and context. That's exactly the profile of task an LLM is good at: it reads the message, understands intent (including sarcasm, negation, and multi-issue tickets a keyword filter can't), and returns a structured decision in under two seconds.
 
+---
 
-## What's actually in the app
+## Workflow
+
+How one issue actually moves through the system, end to end:
+
+```mermaid
+flowchart TD
+    A["Customer describes an issue"] --> B{"AI suggests self-service steps"}
+    B -->|"Solved"| C["Logged as AI-resolved\nno ticket, no team ever involved"]
+    C --> P["Visible in Admin's AI Resolved tab + Analytics"]
+    B -->|"Still stuck"| D["Raise a ticket · status: New"]
+    D --> E["Admin's New Tickets queue"]
+    E --> F["AI auto-classifies:\ncategory / priority / team / tone"]
+    F --> G{"Admin reviews the pick"}
+    G -->|"Approve as-is"| H["Confirm Route"]
+    G -->|"Override category/priority/team"| H
+    H --> I["Status: Routed — assigned to a team"]
+    I --> J["Team moves it to In Progress"]
+    J --> K["Customer + Team chat on the ticket\nattachments included"]
+    K --> L["Team resolves it"]
+    L --> M["Status: Resolved — chat closes"]
+    M --> N["Shows up in All Tickets, Analytics, Teams"]
+    N --> O["Admin can pull a full PDF report anytime"]
+```
+
+1. **Customer describes an issue.** No ticket exists yet — AI reads it and suggests concrete steps to try immediately.
+2. **Solved?** If so, no ticket is ever created — the case is logged separately as AI-resolved, so an Admin can still see it in the **AI Resolved** tab and in Analytics' deflection-rate stats.
+3. **Still stuck** → one click ("raise a ticket") actually creates it, with status `New` and no classification yet.
+4. **Admin's New Tickets queue** picks it up automatically — every ticket there gets classified by AI (category, priority, team, tone, confidence, one-line reasoning) the moment it's seen, no manual "route" click required.
+5. **Admin reviews** the AI's pick — approve it as-is, or override category/priority/team — then selects any number of reviewed tickets and hits **Confirm Route**, which assigns them all at once. Status moves to `Routed`.
+6. **The assigned team** picks it up from their own queue and moves it to `In Progress`.
+7. **Once In Progress**, the customer and that team can message each other directly on the ticket, attachments included — this is enforced server-side, not just hidden in the UI.
+8. **The team resolves it** → status `Resolved`, and the chat closes on both sides.
+9. **From here it's just visible**, everywhere an Admin looks: All Tickets, the Teams workload summary, and Analytics — and an Admin can generate a full PDF report for that one ticket at any point, transcript and attachments included.
+
+---
+
+## User functions
 
 Four account types, each with their own login and dashboard. Every dashboard below also carries a second "Nykaa Pulse" mega-tab alongside "TicketTrident" — see **[Nykaa Pulse](#nykaa-pulse)** further down for what lives there.
 
@@ -48,77 +85,11 @@ A separate account type and dashboard — same shape as Admin (a single fixed lo
 - **Create Survey**: write your own multi-question survey (a fixed 5-point Worst→Best scale) and send it to every customer account at once.
 - **Survey Analytics**: response-type and rating-distribution charts, either for one sent survey or pooled across every survey sent, exportable as a PDF.
 
-See **[Customer feedback insights](#customer-feedback-insights-pulseai)** below for how the pipeline behind this actually works.
-
----
-
-## Per-ticket PDF reports
-
-Beyond the Analytics and Teams PDF exports, an Admin can generate a full report for any single ticket: its details, who's handled it, and the entire chat transcript — with every attachment rendered as its own page in the same PDF. Images get embedded directly; an uploaded PDF has its actual pages merged straight in (not just linked); text and Word documents get their content extracted and typeset as a page. Built with `reportlab` + `pypdf`, entirely in memory.
-
----
-
-## Customer feedback insights (PulseAI)
-
-```mermaid
-flowchart TD
-    A["Customer Voice\n🎫 Tickets · ⭐ Reviews · 📝 Surveys"] --> B["AI Analysis\nsentiment · theme · urgency · actionable?"]
-    B --> C["Themes\nfeedback_items, grouped"]
-    C --> D["Trends\nperiod-over-period % change per theme"]
-    D --> E["Weekly Insight\nheadline · key findings · bottom line"]
-    E --> F["Actions\nAI-recommended, per theme, mark-done"]
-```
-
-Every ticket a customer submits is mirrored into a `feedback_items` table alongside imported reviews and quick surveys — one unified log, regardless of source. `feedback_ai.py` analyzes each item independently of ticket routing (a ticket still gets category/priority/team from `classifier.py` exactly as before); `insights.py` aggregates that log into daily/weekly/monthly/yearly buckets and computes trend deltas; `actions_ai.py` and `narrative_ai.py` turn those aggregates into recommended actions and a persisted plain-language report. None of this ever touches raw customer text once it reaches the aggregation stage — only the numbers `feedback_ai.py` already produced at ingestion time.
-
-### Taxonomy
-
-| Field | Values | Notes |
-|---|---|---|
-| `sentiment_label` | positive / neutral / negative | Judged from the words used, not the topic — a calm question about a serious-sounding topic is neutral, not negative. |
-| `sentiment_score` | -1.0 to 1.0 | A finer-grained companion to the label; must agree with it (never a negative label with a positive score). |
-| `theme` | free text, 2-4 words | Deliberately **not** a fixed enum. An enum forces every real-world issue into one of N buckets chosen in advance; free text lets "checkout latency" and "duplicate billing charge" exist as their own specific labels instead of collapsing into a generic "Technical Issue" or "Billing" bucket. The cost of that choice is consistency — see **Known limitations** below. |
-| `urgency_score` | 0.0 to 1.0 | Driven by severity/business impact (data loss, security, outage, churn risk) — not by politeness or exclamation points. |
-| `is_actionable_ticket` | boolean | True only if a human/team genuinely needs to *do* something — a real bug, billing dispute, security concern, or support request. False for praise, general venting with no ask, or a question answerable by self-service docs. |
-
-### Why these few-shot examples
-
-Each AI call in the pipeline (`feedback_ai.py`, `actions_ai.py`, `narrative_ai.py`) ships 2-4 worked examples chosen to mark the edges of the judgment space, not to hand the model a lookup table:
-
-- **`feedback_ai.py`** (sentiment/theme/urgency/actionable): a negative-and-actionable case, a positive-but-not-actionable case (praise with nothing to act on), a mixed-sentiment case (genuine praise *and* a real defect in one message), and the vague/near-empty edge case. Those four cover the distinctions most likely to get confused — "negative" doesn't imply "actionable," and "actionable" doesn't require negativity.
-- **`actions_ai.py`** (recommended actions): one high-severity example (escalate now) and one low-severity example (log for later, no escalation) — calibrating that the *intensity* of the recommended action should track the data's severity, not treat every flagged theme as equally urgent.
-- **`narrative_ai.py`** (periodic report): one sharply-worsening period and one calm, stable period — so the model has seen both a report that should sound urgent and one that should plainly say "no action needed" rather than manufacturing urgency that isn't in the numbers.
-
-### Accuracy
-
-`python -m app.cli eval-feedback` runs `feedback_ai.analyze_feedback` against 16 hand-labeled samples in `sample_feedback.py` — spanning all four sentiment labels, actionable and non-actionable cases, sarcasm, a non-English message, and the empty-input edge case — and grades sentiment (exact match), `is_actionable_ticket` (exact match), and theme (does the generated theme contain one of a few acceptable keywords, since themes are free text by design). A real run against the live model:
-
-| Dimension | Accuracy |
-|---|---|
-| Sentiment | 100.0% |
-| Actionable | 93.8% |
-| Theme | 100.0% |
-| All three correct | 93.8% |
-
-The one disagreement: a calm "does my plan auto-renew?" question was labeled `is_actionable_ticket=true` in the ground truth (something a human should confirm) but the model called it `false` (answerable by self-service docs, no team action needed) — a genuinely defensible judgment call in either direction, not a clear-cut miss.
-
-### Known limitations
-
-- **Theme fragmentation.** Because themes are free text, two near-duplicate complaints ("checkout is slow" / "checkout takes forever") can land as slightly different theme strings ("checkout latency" vs. "slow checkout process") instead of merging into one bucket — inflating the apparent number of distinct themes and splitting what should be one trend line into two smaller ones.
-- **Occasional arithmetic slip in the narrative report.** In one manual test, the generated report's key findings stated "all 4 items were negative" when the actual breakdown (given directly to the model in the prompt) was 3 negative and 1 positive — a real but isolated instance of the model misreading numbers it was handed rather than reasoning about raw text.
-- **`is_actionable_ticket` has real judgment-call territory**, as the eval above shows — informational questions that could go either way (self-service vs. needs a human) are the likely failure mode a mentor's blind test would surface.
-- **Only lightly tested on non-English input** (one Spanish example in the eval set) and on deliberate adversarial phrasing beyond a single sarcasm case — a wider multilingual/adversarial sample would give a more confident accuracy number there.
-- **The eval above ran against whichever single provider is configured** (OpenAI in this deployment) — it doesn't measure whether accuracy holds across Claude/Groq as well, the way `--compare` does for ticket classification.
-
 ---
 
 ## Nykaa Pulse
 
-A second, self-contained product living in the same app: a cosmetics-e-commerce storefront and feedback loop, built to put the same AI pipelines (sentiment/urgency analysis, ticket classification, PDF reporting) through a structurally different domain than TicketTrident's raw support tickets. Reachable via a "Nykaa Pulse" mega-tab right next to "TicketTrident" on every one of the four dashboards — same login, same account, two products. Nykaa Pulse keeps its own Postgres tables (`np_*`) and its own `/api/nykaa` router; only the `users` table is shared with TicketTrident, so the two products' data never mixes.
-
-### Catalog
-
-Seeded on first run: **10 categories** (Makeup, Skincare, Hair Care, Bath & Body, Fragrance, Men's Grooming, Beauty Tools, Wellness, Personal Care, Nail Care), **4 brands** and **4 subcategories** per category (2 sub-subcategories each), **~160 products** total — real brand names (Maybelline, Lakmé, L'Oréal Paris, Mamaearth, Cetaphil, Minimalist, Dove, NIVEA, and more, recurring across categories the way they do in real life). Every product carries a price, detail attributes (shade/finish/size/skin type), and a fixed list of positive/negative review themes drawn from what real reviews for that kind of product tend to say.
+A second, self-contained product living in the same app: a cosmetics-e-commerce storefront and feedback loop, built to put the same AI pipelines (sentiment/urgency analysis, ticket classification, PDF reporting) through a structurally different domain than TicketTrident's raw support tickets. Reachable via a "Nykaa Pulse" mega-tab right next to "TicketTrident" on every one of the four dashboards — same login, same account, two products.
 
 ### Customer
 
@@ -127,7 +98,7 @@ Everything lives on one page under the "Nykaa Pulse" mega-tab:
 - **Cart & checkout** via a slide-over drawer.
 - **My Orders**: per-item **Feedback** (star rating → theme chips drawn from that exact product's own tags → free text → an optional review title, with a "Generate" button or left blank for an automatic one) and **Delivery Feedback** (5-star + compliment).
 - **Beauty Profile**: a Skin/Hair/Makeup wizard that unlocks personalized recommendations and a one-click AI-generated skincare + haircare routine, one real product per step with a one-sentence reason why it fits.
-- **"Raise a Ticket" support chat**, opened per order item — see [Support flow](#nykaa-pulse-support-flow) below.
+- **"Raise a Ticket" support chat**, opened per order item.
 - A floating **App Feedback** widget (rate the app itself, pick from fixed issue categories — multi-select — plus free text; no AI involved, reachable even logged out from the login page) and a shared pending-survey nudge (the same PM-authored surveys TicketTrident customers get).
 
 ### Team & Admin
@@ -140,42 +111,24 @@ Both dashboards get the same "Nykaa Pulse" mega-tab:
 
 Eight tabs: **Overview** (order/GMV/rating stat tiles, the order → review → photo → published drop-off funnel, review-sentiment donut), **All Feedback** (the raw, filterable review log), **Analytics** (cross-brand comparison — feedback volume by brand, top-5 themes within a picked brand, multi-brand volume/sentiment trend lines, a per-year brand rating chart with star-symbol labels, category/subcategory rankings, positive/negative/recurring themes — or drill into one brand for its own full breakdown), **App Feedback** and **Delivery Feedback** (aggregate-only rating/category breakdowns, no raw text), **Reports** (a weekly/monthly/yearly brand insight report — plain-language bullets, not paragraphs — with its own PDF export), and **Create Survey** / **Survey Analytics** — shared verbatim with TicketTrident, since a PM's surveys go to every customer regardless of which product they're browsing.
 
-### AI features unique to Nykaa Pulse
+---
 
-| Feature | What it does | Fallback with no provider configured |
+## Tech stack & why
+
+| Layer | Choice | Why |
 |---|---|---|
-| Fit summarizer | 1-2 sentence consensus + skin-type-segmented "fit notes" from a product's own published reviews | The product's seed positive/negative theme tags |
-| Ask the reviews | Answers a shopper's question grounded only in that product's reviews; says so if ungrounded | "Not available right now" / "no published reviews yet" |
-| Support chat | Multi-turn bot that decides per-turn whether to keep helping or escalate | Immediate honest escalation via the same keyword baseline the rest of the app uses |
-| Review/ticket titles | A short title from a review's description, or from a ticket's chat transcript | Truncates the source text at a word boundary |
-| Beauty routine | One real product per routine step, with a one-sentence personalized reason | Top-ranked candidate per step + a generic reason |
-| Brand scorecards | One-sentence-per-brand summary of aggregated rating/volume/theme numbers | A deterministic "avg rating X.X across N reviews; top theme: Y" sentence |
-
-### Nykaa Pulse support flow
-
-```mermaid
-flowchart TD
-    A["Customer opens Help on an order item"] --> B{"Chit-chat?\ngreeting, arithmetic, thanks"}
-    B -->|"Yes"| C["Answered directly\nnever escalated, doesn't count toward turn budget"]
-    B -->|"No"| D{"Hard-trigger keyword?\nbroken, refund, can't log in, ..."}
-    D -->|"Yes"| E["Escalate immediately, turn one"]
-    D -->|"No"| F["Bot tries to help\nup to 2 real turns"]
-    F -->|"Model itself decides to escalate"| E
-    F -->|"2 turns used, still unresolved"| E
-    E --> G["np_tickets row created\ntranscript copied into the ticket's own comment thread"]
-    G --> H["Team: Routed -> In Progress -> Resolved"]
-    H --> I["Customer rates the support experience (CSAT)"]
-```
-
-Separately: a product review the AI judges genuinely actionable auto-opens a ticket on the customer's behalf — tagged "Auto-flagged from a review" — so a customer never has to separately click "Raise a Ticket" for a problem they just described in a review.
-
-### Team taxonomy
-
-Both products route to the same 7 teams: **Triage, Order & Delivery Team, Returns & Refunds Team, Payments & Billing Team, Product Quality Team, Technical Support Team, Account & Loyalty Team.**
+| LLM | OpenAI - Structured Outputs / JSON Schema on each | JSON Schema enforcement at the API level, not a prompt convention. 
+| Backend | FastAPI + Pydantic | Schema-first by default; the same Pydantic models that validate an LLM's output also generate the OpenAPI docs. |
+| Auth | PyJWT + bcrypt | Stateless JWTs carrying role (`user`/`team`/`admin`) and identity; bcrypt-hashed passwords, never stored or logged in plaintext. |
+| Storage | Postgres (Supabase) via `psycopg` | Real persistence and a full audit trail — tickets, users, team members, chat messages, and attachment bytes — with a managed host that survives restarts/redeploys and supports more than one backend process. |
+| PDF generation | `reportlab` + `pypdf` (backend, per-ticket reports); `jsPDF` + `jspdf-autotable` (frontend, Analytics/Teams exports) | Per-ticket reports need to merge real pages from arbitrary uploaded PDFs and embed images — a proper PDF library, not just a print-to-PDF trick. |
+| Frontend | React + JavaScript + Vite + React Router | Fast dev loop with no build-time type layer; three role-gated route trees (`/user`, `/team`, `/admin`). |
+| Styling | Tailwind CSS v4 | Design tokens (`@theme`) keep light/dark and priority/tone/status colors consistent across every component without a component library dependency. |
+| Charts | Recharts | Composable, React-native chart primitives for the analytics dashboard. |
 
 ---
 
-## Quick start
+## How to run
 
 ### 1. Backend (FastAPI)
 
@@ -224,56 +177,3 @@ python -m app.cli demo                                     # routes all 30 sampl
 python -m app.cli eval-feedback                             # accuracy over the hand-labeled feedback sample set
 python -m app.cli health                                   # live vs mock mode, current model
 ```
-
----
-
-## Tech stack & why
-
-| Layer | Choice | Why |
-|---|---|---|
-| LLM | OpenAI - Structured Outputs / JSON Schema on each | JSON Schema enforcement at the API level, not a prompt convention. 
-| Backend | FastAPI + Pydantic | Schema-first by default; the same Pydantic models that validate an LLM's output also generate the OpenAPI docs. |
-| Auth | PyJWT + bcrypt | Stateless JWTs carrying role (`user`/`team`/`admin`) and identity; bcrypt-hashed passwords, never stored or logged in plaintext. |
-| Storage | Postgres (Supabase) via `psycopg` | Real persistence and a full audit trail — tickets, users, team members, chat messages, and attachment bytes — with a managed host that survives restarts/redeploys and supports more than one backend process. |
-| PDF generation | `reportlab` + `pypdf` (backend, per-ticket reports); `jsPDF` + `jspdf-autotable` (frontend, Analytics/Teams exports) | Per-ticket reports need to merge real pages from arbitrary uploaded PDFs and embed images — a proper PDF library, not just a print-to-PDF trick. |
-| Frontend | React + JavaScript + Vite + React Router | Fast dev loop with no build-time type layer; three role-gated route trees (`/user`, `/team`, `/admin`). |
-| Styling | Tailwind CSS v4 | Design tokens (`@theme`) keep light/dark and priority/tone/status colors consistent across every component without a component library dependency. |
-| Charts | Recharts | Composable, React-native chart primitives for the analytics dashboard. |
-
----
-
-## Workflow
-
-How one issue actually moves through the system, end to end:
-
-```mermaid
-flowchart TD
-    A["Customer describes an issue"] --> B{"AI suggests self-service steps"}
-    B -->|"Solved"| C["Logged as AI-resolved\nno ticket, no team ever involved"]
-    C --> P["Visible in Admin's AI Resolved tab + Analytics"]
-    B -->|"Still stuck"| D["Raise a ticket · status: New"]
-    D --> E["Admin's New Tickets queue"]
-    E --> F["AI auto-classifies:\ncategory / priority / team / tone"]
-    F --> G{"Admin reviews the pick"}
-    G -->|"Approve as-is"| H["Confirm Route"]
-    G -->|"Override category/priority/team"| H
-    H --> I["Status: Routed — assigned to a team"]
-    I --> J["Team moves it to In Progress"]
-    J --> K["Customer + Team chat on the ticket\nattachments included"]
-    K --> L["Team resolves it"]
-    L --> M["Status: Resolved — chat closes"]
-    M --> N["Shows up in All Tickets, Analytics, Teams"]
-    N --> O["Admin can pull a full PDF report anytime"]
-```
-
-1. **Customer describes an issue.** No ticket exists yet — AI reads it and suggests concrete steps to try immediately.
-2. **Solved?** If so, no ticket is ever created — the case is logged separately as AI-resolved, so an Admin can still see it in the **AI Resolved** tab and in Analytics' deflection-rate stats.
-3. **Still stuck** → one click ("raise a ticket") actually creates it, with status `New` and no classification yet.
-4. **Admin's New Tickets queue** picks it up automatically — every ticket there gets classified by AI (category, priority, team, tone, confidence, one-line reasoning) the moment it's seen, no manual "route" click required.
-5. **Admin reviews** the AI's pick — approve it as-is, or override category/priority/team — then selects any number of reviewed tickets and hits **Confirm Route**, which assigns them all at once. Status moves to `Routed`.
-6. **The assigned team** picks it up from their own queue and moves it to `In Progress`.
-7. **Once In Progress**, the customer and that team can message each other directly on the ticket, attachments included — this is enforced server-side, not just hidden in the UI.
-8. **The team resolves it** → status `Resolved`, and the chat closes on both sides.
-9. **From here it's just visible**, everywhere an Admin looks: All Tickets, the Teams workload summary, and Analytics — and an Admin can generate a full PDF report for that one ticket at any point, transcript and attachments included.
-
----
