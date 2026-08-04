@@ -112,7 +112,7 @@ function ReviewPhotoField({ order, item }) {
 // labeled way in, with a red unread-reply count when the other side has
 // replied) — works identically whether or not a ticket exists yet, since
 // TicketChatModal already branches on item.linked_ticket_id itself.
-function OrderItemRow({ order, item, onOpenFeedback, onOpenTicketChat }) {
+function OrderItemRow({ item, onOpenFeedback, onOpenTicketChat }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/5 dark:border-white/10 py-3 first:border-t-0 first:pt-0">
       <div className="min-w-0">
@@ -609,7 +609,6 @@ export function NykaaOrdersPage({ onNavigateToBeautyProfile }) {
             {order.items.map((item) => (
               <OrderItemRow
                 key={item.id}
-                order={order}
                 item={item}
                 onOpenFeedback={(clickedItem) => setActiveFeedback({ order, item: clickedItem })}
                 onOpenTicketChat={(clickedItem) => setActiveTicketChat({ order, item: clickedItem })}

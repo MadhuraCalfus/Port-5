@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, MessageCircle, RefreshCw, Search, Sparkles } from "lucide-react";
+import { MessageCircle, RefreshCw, Search, Sparkles } from "lucide-react";
 import { api } from "../api";
 import { Card, Modal } from "../components/primitives";
 

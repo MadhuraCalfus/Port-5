@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FileText, Loader2, Paperclip, Send } from "lucide-react";
 import { api } from "../api";
 import { downloadBlob } from "../downloadBlob";
@@ -29,7 +29,7 @@ export function CommentThread({ ticketId, readOnly = false }) {
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const r = await api.ticketComments(ticketId);
       setComments(r.comments);
@@ -37,11 +37,11 @@ export function CommentThread({ ticketId, readOnly = false }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [ticketId]);
 
   useEffect(() => {
     load().then(() => api.markTicketCommentsRead(ticketId).catch(() => {}));
-  }, [ticketId]);
+  }, [ticketId, load]);
 
   async function send(e) {
     e.preventDefault();

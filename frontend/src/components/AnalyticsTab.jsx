@@ -8,9 +8,6 @@ import { Card } from "./primitives";
 const PRIORITY_COLORS = { High: "#c0392b", Medium: "#b8860b", Low: "#2f8f5b" };
 const STATUS_COLORS = { New: "#64748b", Routed: "#3d6b96", "In Progress": "#b8860b", Resolved: "#2f8f5b" };
 const STATUS_ORDER = ["New", "Routed", "In Progress", "Resolved"];
-const MODE_COLORS = { live: "#3d6b96", repaired: "#b8860b", fallback: "#c0392b", mock: "#94a3b8" };
-const MODE_ORDER = ["live", "repaired", "fallback", "mock"];
-const MODE_LABELS = { live: "Live", repaired: "Self-repaired JSON", fallback: "Fallback baseline", mock: "Keyword baseline" };
 const PALETTE = ["#3d6b96", "#7fa8c9", "#9a9a9f", "#c0392b", "#b8860b", "#2f8f5b", "#5a5a5e", "#8a8a8f"];
 const RESOLUTION_COLORS = { "Resolved by AI": "#2f8f5b", "Routed to a team": "#3d6b96" };
 

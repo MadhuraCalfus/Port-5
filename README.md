@@ -2,6 +2,8 @@
 
 An AI-powered support ticket platform. A customer describes an issue; AI tries to resolve it on the spot with concrete steps, and only becomes a real ticket — classified into **category, priority, team, tone, and a one-line reason** as strict, schema-validated JSON — if that isn't enough. Four account types (Customer, Team, Admin, Product Manager) each get their own dashboard, and a customer and their assigned team can message each other, attachments included, right on the ticket. Every piece of customer voice — tickets, imported reviews, and quick surveys alike — also feeds a separate PM dashboard that tracks sentiment, themes, and trends over time, and generates plain-language weekly/monthly reports with recommended actions.
 
+The same app also runs a second, self-contained product: **[Nykaa Pulse](#nykaa-pulse)** — a cosmetics-e-commerce storefront and feedback loop (catalog, orders, reviews, beauty profiles, its own support-ticket flow) reachable via a "Nykaa Pulse" mega-tab right next to "TicketTrident" on every one of the four dashboards. Same login, same account, two products, same AI pipelines proving themselves against a structurally different domain.
+
 Built for **Port·04 — The Senate of Gods**.
 
 ---
@@ -13,7 +15,7 @@ Support teams drown in tickets because triage is repetitive, low-judgment work t
 
 ## What's actually in the app
 
-Four account types, each with their own login and dashboard:
+Four account types, each with their own login and dashboard. Every dashboard below also carries a second "Nykaa Pulse" mega-tab alongside "TicketTrident" — see **[Nykaa Pulse](#nykaa-pulse)** further down for what lives there.
 
 ### Customer
 - Describes an issue in plain language — **AI tries to resolve it immediately**, suggesting concrete steps before any ticket is created. If that's not enough, one click ("Still not solved — raise a ticket") files a real ticket; if it helped ("That solved it"), no ticket is ever created — the case is just logged as AI-resolved so an Admin can still see it.
@@ -38,12 +40,13 @@ Four account types, each with their own login and dashboard:
 
 ### Product Manager
 
-A separate account type and dashboard — same shape as Admin (a single fixed login, no signup, not something Admin creates or manages), but a completely different lens on the same customer voice:
+A separate account type and dashboard — same shape as Admin (a single fixed login, no signup, not something Admin creates or manages), but a completely different lens on the same customer voice. Five tabs:
 
-- **Overview**: source breakdown (tickets / reviews / surveys), a sentiment-distribution chart, and avg sentiment/urgency/actionable-count stats for the current week.
-- **Themes & Trends**: theme frequency chart plus period-over-period deltas per theme (new/up/down/resolved, with the actual % change), filterable by day/week/month/year.
-- **Reports & Actions**: a persisted, plain-language report per period (headline, key findings, narrative, bottom line) generated on demand, plus AI-recommended actions per worsening/urgent theme with a mark-done toggle.
-- **Import Feedback**: paste-a-batch import for external reviews or survey exports — the only way that kind of customer voice enters the system, since there's no other product surface for it.
+- **All Feedback**: every ticket, review, and survey response ever logged, in one searchable, period-filterable table — sentiment, category, theme, urgency, and actionable status alongside the raw text.
+- **Analytics**: a category-volume chart, a "themes within [category]" drill-down (pick any category, see its top themes), a sentiment donut, star-rating distribution, and urgency/actionable breakdowns — filterable by day/week/month/year/custom range, exportable as a PDF.
+- **Reports**: a persisted weekly/monthly/yearly report per period, generated on demand — point-wise bullets (not paragraphs) for the narrative, what's going well, the top pain point, and the recommendation — plus AI-recommended actions per worsening/urgent theme with a mark-done toggle, all exportable together as one PDF alongside the period's raw feedback items.
+- **Create Survey**: write your own multi-question survey (a fixed 5-point Worst→Best scale) and send it to every customer account at once.
+- **Survey Analytics**: response-type and rating-distribution charts, either for one sent survey or pooled across every survey sent, exportable as a PDF.
 
 See **[Customer feedback insights](#customer-feedback-insights-pulseai)** below for how the pipeline behind this actually works.
 
@@ -72,7 +75,7 @@ Every ticket a customer submits is mirrored into a `feedback_items` table alongs
 
 | Field | Values | Notes |
 |---|---|---|
-| `sentiment_label` | positive / neutral / negative / mixed | Judged from the words used, not the topic — a calm question about a serious-sounding topic is neutral, not negative. |
+| `sentiment_label` | positive / neutral / negative | Judged from the words used, not the topic — a calm question about a serious-sounding topic is neutral, not negative. |
 | `sentiment_score` | -1.0 to 1.0 | A finer-grained companion to the label; must agree with it (never a negative label with a positive score). |
 | `theme` | free text, 2-4 words | Deliberately **not** a fixed enum. An enum forces every real-world issue into one of N buckets chosen in advance; free text lets "checkout latency" and "duplicate billing charge" exist as their own specific labels instead of collapsing into a generic "Technical Issue" or "Billing" bucket. The cost of that choice is consistency — see **Known limitations** below. |
 | `urgency_score` | 0.0 to 1.0 | Driven by severity/business impact (data loss, security, outage, churn risk) — not by politeness or exclamation points. |
@@ -106,6 +109,69 @@ The one disagreement: a calm "does my plan auto-renew?" question was labeled `is
 - **`is_actionable_ticket` has real judgment-call territory**, as the eval above shows — informational questions that could go either way (self-service vs. needs a human) are the likely failure mode a mentor's blind test would surface.
 - **Only lightly tested on non-English input** (one Spanish example in the eval set) and on deliberate adversarial phrasing beyond a single sarcasm case — a wider multilingual/adversarial sample would give a more confident accuracy number there.
 - **The eval above ran against whichever single provider is configured** (OpenAI in this deployment) — it doesn't measure whether accuracy holds across Claude/Groq as well, the way `--compare` does for ticket classification.
+
+---
+
+## Nykaa Pulse
+
+A second, self-contained product living in the same app: a cosmetics-e-commerce storefront and feedback loop, built to put the same AI pipelines (sentiment/urgency analysis, ticket classification, PDF reporting) through a structurally different domain than TicketTrident's raw support tickets. Reachable via a "Nykaa Pulse" mega-tab right next to "TicketTrident" on every one of the four dashboards — same login, same account, two products. Nykaa Pulse keeps its own Postgres tables (`np_*`) and its own `/api/nykaa` router; only the `users` table is shared with TicketTrident, so the two products' data never mixes.
+
+### Catalog
+
+Seeded on first run: **10 categories** (Makeup, Skincare, Hair Care, Bath & Body, Fragrance, Men's Grooming, Beauty Tools, Wellness, Personal Care, Nail Care), **4 brands** and **4 subcategories** per category (2 sub-subcategories each), **~160 products** total — real brand names (Maybelline, Lakmé, L'Oréal Paris, Mamaearth, Cetaphil, Minimalist, Dove, NIVEA, and more, recurring across categories the way they do in real life). Every product carries a price, detail attributes (shade/finish/size/skin type), and a fixed list of positive/negative review themes drawn from what real reviews for that kind of product tend to say.
+
+### Customer
+
+Everything lives on one page under the "Nykaa Pulse" mega-tab:
+- **Storefront**: search, category/brand/subcategory filters, a product grid where every card expands into an AI-written "What customers say" panel (fit summary, praise/concern chips, an "ask about this product" Q&A box grounded only in that product's own reviews).
+- **Cart & checkout** via a slide-over drawer.
+- **My Orders**: per-item **Feedback** (star rating → theme chips drawn from that exact product's own tags → free text → an optional review title, with a "Generate" button or left blank for an automatic one) and **Delivery Feedback** (5-star + compliment).
+- **Beauty Profile**: a Skin/Hair/Makeup wizard that unlocks personalized recommendations and a one-click AI-generated skincare + haircare routine, one real product per step with a one-sentence reason why it fits.
+- **"Raise a Ticket" support chat**, opened per order item — see [Support flow](#nykaa-pulse-support-flow) below.
+- A floating **App Feedback** widget (rate the app itself, pick from fixed issue categories — multi-select — plus free text; no AI involved, reachable even logged out from the login page) and a shared pending-survey nudge (the same PM-authored surveys TicketTrident customers get).
+
+### Team & Admin
+
+Both dashboards get the same "Nykaa Pulse" mega-tab:
+- **Team**: their own `np_tickets` queue (Routed → In Progress → Resolved, chat once In Progress) plus an AI Resolved log of bot-only conversations that never escalated.
+- **Admin**: full ticket oversight across every team (status/team filters, search, sort, read-only chat history, per-ticket PDF export), the same AI Resolved log, a per-team ticket-count rollup, team-lead account management, and an Analytics tab (tickets over time, status/priority/category/team/tone breakdowns, AI-resolved-vs-routed).
+
+### Product Manager
+
+Eight tabs: **Overview** (order/GMV/rating stat tiles, the order → review → photo → published drop-off funnel, review-sentiment donut), **All Feedback** (the raw, filterable review log), **Analytics** (cross-brand comparison — feedback volume by brand, top-5 themes within a picked brand, multi-brand volume/sentiment trend lines, a per-year brand rating chart with star-symbol labels, category/subcategory rankings, positive/negative/recurring themes — or drill into one brand for its own full breakdown), **App Feedback** and **Delivery Feedback** (aggregate-only rating/category breakdowns, no raw text), **Reports** (a weekly/monthly/yearly brand insight report — plain-language bullets, not paragraphs — with its own PDF export), and **Create Survey** / **Survey Analytics** — shared verbatim with TicketTrident, since a PM's surveys go to every customer regardless of which product they're browsing.
+
+### AI features unique to Nykaa Pulse
+
+| Feature | What it does | Fallback with no provider configured |
+|---|---|---|
+| Fit summarizer | 1-2 sentence consensus + skin-type-segmented "fit notes" from a product's own published reviews | The product's seed positive/negative theme tags |
+| Ask the reviews | Answers a shopper's question grounded only in that product's reviews; says so if ungrounded | "Not available right now" / "no published reviews yet" |
+| Support chat | Multi-turn bot that decides per-turn whether to keep helping or escalate | Immediate honest escalation via the same keyword baseline the rest of the app uses |
+| Review/ticket titles | A short title from a review's description, or from a ticket's chat transcript | Truncates the source text at a word boundary |
+| Beauty routine | One real product per routine step, with a one-sentence personalized reason | Top-ranked candidate per step + a generic reason |
+| Brand scorecards | One-sentence-per-brand summary of aggregated rating/volume/theme numbers | A deterministic "avg rating X.X across N reviews; top theme: Y" sentence |
+
+### Nykaa Pulse support flow
+
+```mermaid
+flowchart TD
+    A["Customer opens Help on an order item"] --> B{"Chit-chat?\ngreeting, arithmetic, thanks"}
+    B -->|"Yes"| C["Answered directly\nnever escalated, doesn't count toward turn budget"]
+    B -->|"No"| D{"Hard-trigger keyword?\nbroken, refund, can't log in, ..."}
+    D -->|"Yes"| E["Escalate immediately, turn one"]
+    D -->|"No"| F["Bot tries to help\nup to 2 real turns"]
+    F -->|"Model itself decides to escalate"| E
+    F -->|"2 turns used, still unresolved"| E
+    E --> G["np_tickets row created\ntranscript copied into the ticket's own comment thread"]
+    G --> H["Team: Routed -> In Progress -> Resolved"]
+    H --> I["Customer rates the support experience (CSAT)"]
+```
+
+Separately: a product review the AI judges genuinely actionable auto-opens a ticket on the customer's behalf — tagged "Auto-flagged from a review" — so a customer never has to separately click "Raise a Ticket" for a problem they just described in a review.
+
+### Team taxonomy
+
+Both products route to the same 7 teams: **Triage, Order & Delivery Team, Returns & Refunds Team, Payments & Billing Team, Product Quality Team, Technical Support Team, Account & Loyalty Team.**
 
 ---
 
@@ -211,143 +277,3 @@ flowchart TD
 9. **From here it's just visible**, everywhere an Admin looks: All Tickets, the Teams workload summary, and Analytics — and an Admin can generate a full PDF report for that one ticket at any point, transcript and attachments included.
 
 ---
-
-## Screenshots
-
-### Getting started
-
-**Sign in**
-Three account types — Customer, Team, and Admin — each with their own login on one page.
-
-<img src="screenshots/Sign up Sign In Page.png" width="700" />
-
-### Customer
-
-**Describe an issue**
-The customer describes a problem in plain language; AI tries to help before any ticket exists.
-
-<img src="screenshots/customer ui.png" width="700" />
-
-**AI suggests steps to try**
-AI returns concrete self-service steps and a summary — from here the customer confirms it worked or raises a ticket anyway.
-
-<img src="screenshots/customer ai resolved.png" width="700" />
-
-**Resolved by AI**
-Every issue AI solved on the spot is logged here, with the exact steps that fixed it — no ticket, no team ever involved.
-
-<img src="screenshots/customer ai history.png" width="700" />
-
-**AI defers to a human**
-For a genuine billing dispute, AI recognizes it should be handled by a person and points straight to raising a ticket instead of guessing.
-
-<img src="screenshots/customer ui 2.png" width="700" />
-
-**A freshly raised ticket**
-Right after raising a ticket it shows status "In queue", waiting for an admin to review the AI's routing.
-
-<img src="screenshots/customer my tickets.png" width="700" />
-
-**Tracking a ticket to resolution**
-The status stepper shows a ticket's full journey from In queue to Resolved.
-
-<img src="screenshots/Customer - issue resolved.png" width="700" />
-
-**New reply from the team**
-An unread-message badge on "Message team" tells the customer their assigned team just replied.
-
-<img src="screenshots/customer- chat received.png" width="700" />
-
-**Chatting with the team**
-Customer and team message each other directly on the ticket once it's In Progress, right through to resolution.
-
-<img src="screenshots/chat.png" width="700" />
-
-### Team member
-
-**Replying to a customer**
-A team member opens a ticket's chat thread to ask for more detail before working the issue.
-
-<img src="screenshots/chat application from team.png" width="700" />
-
-**Marking a ticket resolved**
-Once the issue is fixed, the team moves the ticket to Resolved, closing the chat on both sides.
-
-<img src="screenshots/Team - issue resolved.png" width="700" />
-
-### Admin
-
-**AI's classification, up close**
-Category, priority, team, tone, and confidence for one ticket, plus the naive keyword baseline shown for comparison.
-
-<img src="screenshots/Admin - routing.png" width="700" />
-
-**New Tickets queue**
-Every incoming ticket is classified automatically the moment it's seen; select any number and Confirm Route to assign them all at once.
-
-<img src="screenshots/Admin - new tickets.png" width="700" />
-
-**All Tickets**
-Every ticket ever submitted, filterable by status and by team, searchable by ID, name, or message.
-
-<img src="screenshots/Admin - all tickets.png" width="700" />
-
-**Reading a ticket's chat history**
-An admin gets a read-only view into any ticket's full conversation, without being able to reply.
-
-<img src="screenshots/Admin - access to chats.png" width="700" />
-
-**Filtered to Resolved**
-The same All Tickets table, narrowed instantly to just the resolved ones.
-
-<img src="screenshots/Admin - resolved.png" width="700" />
-
-**AI Resolved, across every customer**
-Every case where a customer's issue was closed out by AI on its own, with a running total and the exact steps it suggested.
-
-<img src="screenshots/Admin - ai resolved.png" width="700" />
-
-**Team workload**
-Assigned / in-progress / resolved counts for every team that actually exists in this deployment.
-
-<img src="screenshots/Admin - Teams.png" width="700" />
-
-**Managing team accounts**
-An admin creates a login for a support team member, scoped to exactly one team.
-
-<img src="screenshots/Admin - team members.png" width="700" />
-
-**Manual vs AI — timing yourself**
-An admin classifies a real ticket by hand with a stopwatch running, before letting AI take the exact same ticket.
-
-<img src="screenshots/Admin - manual ai race.png" width="700" />
-
-**Manual vs AI — the result**
-A genuine, measured comparison — here AI was 6x faster than manual triage on the same ticket.
-
-<img src="screenshots/Admin - manual ai race 2.png" width="700" />
-
-**Demo: 30 sample tickets**
-One click routes the full bundled demo set, spanning every tone, priority, and team.
-
-<img src="screenshots/Admin - demo 1.png" width="700" />
-
-**Demo results**
-Every one of the 30 sample tickets routed, with category, priority, team, tone, and confidence for each.
-
-<img src="screenshots/Admin -  demo.png" width="700" />
-
-**Analytics**
-Tickets routed vs. resolved by AI, time saved, tickets over time, and every breakdown in one dashboard.
-
-<img src="screenshots/Admin - analytics.png" width="700" />
-
-**Analytics, exported**
-The same numbers as a shareable PDF report, one click away from the dashboard.
-
-<img src="screenshots/Analytics report.png" width="700" />
-
-**A single ticket's full story**
-Details, the entire chat transcript, and every attachment merged into one PDF report.
-
-<img src="screenshots/Admin - entire process report.png" width="700" />
