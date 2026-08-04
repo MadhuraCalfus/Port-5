@@ -25,6 +25,8 @@ flowchart TD
     C --> P["Visible in Admin's AI Resolved tab + Analytics"]
     B -->|"Still stuck"| D["Raise a ticket · status: New"]
     D --> E["Admin's New Tickets queue"]
+    D --> Q["Mirrored into feedback_items\nsentiment / theme / urgency / actionable"]
+    Q --> R["PM dashboard\nAll Feedback · Analytics · Reports"]
     E --> F["AI auto-classifies:\ncategory / priority / team / tone"]
     F --> G{"Admin reviews the pick"}
     G -->|"Approve as-is"| H["Confirm Route"]
@@ -41,12 +43,13 @@ flowchart TD
 1. **Customer describes an issue.** No ticket exists yet — AI reads it and suggests concrete steps to try immediately.
 2. **Solved?** If so, no ticket is ever created — the case is logged separately as AI-resolved, so an Admin can still see it in the **AI Resolved** tab and in Analytics' deflection-rate stats.
 3. **Still stuck** → one click ("raise a ticket") actually creates it, with status `New` and no classification yet.
-4. **Admin's New Tickets queue** picks it up automatically — every ticket there gets classified by AI (category, priority, team, tone, confidence, one-line reasoning) the moment it's seen, no manual "route" click required.
-5. **Admin reviews** the AI's pick — approve it as-is, or override category/priority/team — then selects any number of reviewed tickets and hits **Confirm Route**, which assigns them all at once. Status moves to `Routed`.
-6. **The assigned team** picks it up from their own queue and moves it to `In Progress`.
-7. **Once In Progress**, the customer and that team can message each other directly on the ticket, attachments included — this is enforced server-side, not just hidden in the UI.
-8. **The team resolves it** → status `Resolved`, and the chat closes on both sides.
-9. **From here it's just visible**, everywhere an Admin looks: All Tickets, the Teams workload summary, and Analytics — and an Admin can generate a full PDF report for that one ticket at any point, transcript and attachments included.
+4. **In parallel, the ticket is mirrored into `feedback_items`** — AI independently analyzes sentiment, theme, urgency, and actionability, feeding the PM dashboard's All Feedback, Analytics, and Reports tabs regardless of how (or whether) the ticket ever gets routed.
+5. **Admin's New Tickets queue** picks it up automatically — every ticket there gets classified by AI (category, priority, team, tone, confidence, one-line reasoning) the moment it's seen, no manual "route" click required.
+6. **Admin reviews** the AI's pick — approve it as-is, or override category/priority/team — then selects any number of reviewed tickets and hits **Confirm Route**, which assigns them all at once. Status moves to `Routed`.
+7. **The assigned team** picks it up from their own queue and moves it to `In Progress`.
+8. **Once In Progress**, the customer and that team can message each other directly on the ticket, attachments included — this is enforced server-side, not just hidden in the UI.
+9. **The team resolves it** → status `Resolved`, and the chat closes on both sides.
+10. **From here it's just visible**, everywhere an Admin looks: All Tickets, the Teams workload summary, and Analytics — and an Admin can generate a full PDF report for that one ticket at any point, transcript and attachments included.
 
 ---
 
@@ -90,6 +93,33 @@ A separate account type and dashboard — same shape as Admin (a single fixed lo
 ## Nykaa Pulse
 
 A second, self-contained product living in the same app: a cosmetics-e-commerce storefront and feedback loop, built to put the same AI pipelines (sentiment/urgency analysis, ticket classification, PDF reporting) through a structurally different domain than TicketTrident's raw support tickets. Reachable via a "Nykaa Pulse" mega-tab right next to "TicketTrident" on every one of the four dashboards — same login, same account, two products.
+
+### Workflow
+
+How a Nykaa Pulse support case moves from a customer's question to a resolved ticket:
+
+```mermaid
+flowchart TD
+    A["Customer opens Help on an order item"] --> B{"Chit-chat?\ngreeting, arithmetic, thanks"}
+    B -->|"Yes"| C["Answered directly\nnever escalated, doesn't count toward turn budget"]
+    B -->|"No"| D{"Hard-trigger keyword?\nbroken, refund, can't log in, ..."}
+    D -->|"Yes"| E["Escalate immediately, turn one"]
+    D -->|"No"| F["Bot tries to help\nup to 2 real turns"]
+    F -->|"Model itself decides to escalate"| E
+    F -->|"2 turns used, still unresolved"| E
+    E --> G["np_tickets row created\ntranscript copied into the ticket's own comment thread"]
+    G --> H["Team: Routed -> In Progress -> Resolved"]
+    H --> I["Customer rates the support experience (CSAT)"]
+```
+
+1. **Customer opens Help** on an order item — pure chit-chat (greetings, thanks, arithmetic) is answered directly; it's never escalated and doesn't count toward the turn budget.
+2. **A hard-trigger keyword** (broken, refund, can't log in, etc.) escalates immediately, on the very first real turn.
+3. **Otherwise, the bot tries to help** for up to 2 real turns — if the model itself decides to escalate, or the 2 turns run out with the issue still unresolved, it escalates the same way.
+4. **Escalating creates an `np_tickets` row**, with the full chat transcript copied straight into the ticket's own comment thread — nothing is lost switching from bot to human.
+5. **The team works it** the same way as TicketTrident: Routed → In Progress → Resolved.
+6. **The customer rates the support experience** (CSAT) once it's resolved.
+
+Separately: a product review the AI judges genuinely actionable auto-opens a ticket on the customer's behalf — tagged "Auto-flagged from a review" — so a customer never has to separately click "Raise a Ticket" for a problem they just described in a review.
 
 ### Customer
 
