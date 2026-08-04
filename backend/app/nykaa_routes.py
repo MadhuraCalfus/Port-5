@@ -129,12 +129,9 @@ def _hard_trigger_category_team(message: str) -> tuple[Category, Team] | None:
 
 # Deterministic, zero-LLM-call guardrail for pure small talk / general-
 # knowledge asks that have nothing to do with an order or product (arithmetic,
-# "what's the time", greetings, thanks) — these used to fall through to
-# run_chat_turn and then, on the very next message, get force-escalated to a
-# real team purely because MAX_BOT_TURNS counted every customer turn
-# regardless of topic. Answered directly and instantly here instead: never
-# escalated, and excluded from the MAX_BOT_TURNS count (see chat_turn) so chit
-# -chat can't burn through the turn budget meant for a genuine issue.
+# "what's the time", greetings, thanks) — answered directly and instantly
+# here instead of spending a real run_chat_turn call on something that was
+# never going anywhere near an escalation. Never escalated.
 _GREETING_RE = re.compile(r"^(hi+|hello+|hey+|yo|sup|good\s*(morning|afternoon|evening))[\s!.,?]*$", re.IGNORECASE)
 _THANKS_RE = re.compile(r"^(thanks?( you)?|thx|ty|ok(ay)?|cool|great|got it|nice one)[\s!.,?]*$", re.IGNORECASE)
 _HOW_ARE_YOU_RE = re.compile(r"\bhow('?s| is| are)\s+(you|it going|things)\b", re.IGNORECASE)
@@ -515,14 +512,6 @@ def _transcript(turns: list[dict]) -> str:
     return "\n".join(f'{"Customer" if t["role"] == "user" else "Assistant"}: {t["text"]}' for t in turns)
 
 
-# Hard-triggered messages (see _HARD_TRIGGERS above) escalate on turn one,
-# regardless of this cap — this only bounds how long the bot keeps trying to
-# help with something that matched no known-severe keyword before handing
-# off anyway, so a genuinely unclear issue doesn't drag on for several
-# back-and-forth replies before a human gets involved.
-MAX_BOT_TURNS = 2
-
-
 @nykaa_router.get("/orders/{order_id}/items/{item_id}/chat")
 def chat_history(order_id: int, item_id: int, claims: dict = Depends(auth.require_user)):
     """Prior bot-phase turns (np_chat_turns) for this item — lets the
@@ -543,9 +532,11 @@ def chat_turn(
 ):
     """One turn of "Raise a Ticket"'s multi-turn support chat. Persists the
     customer's message, then either (a) hard-triggers an instant escalation
-    on a known-severe keyword, (b) forces escalation once MAX_BOT_TURNS is
-    reached, (c) lets nykaa_ai_features.run_chat_turn decide, or (d) keeps
-    chatting. On escalation, the prior bot-phase transcript (np_chat_turns)
+    on a known-severe keyword, (b) lets nykaa_ai_features.run_chat_turn
+    decide, or (c) keeps chatting — the bot keeps asking for more detail for
+    as many turns as it takes, deferring to the model's own judgment on when
+    an issue is beyond what conversation can resolve. On escalation, the
+    prior bot-phase transcript (np_chat_turns)
     is copied into np_ticket_comments so the human agent who eventually
     opens the ticket sees full context, not a blank thread, capped off with
     a handoff system message."""
@@ -577,17 +568,9 @@ def chat_turn(
 
     npstore.add_chat_turn(order_id, item_id, "user", message)
 
-    # Only real (non-chit-chat) turns count toward the forced-escalation cap
-    # — otherwise a customer testing the bot with off-topic messages burns
-    # through the turn budget meant for genuine issues and gets force-
-    # escalated to a human team for no reason.
-    customer_turns_so_far = len(
-        [t for t in prior_turns if t["role"] == "user" and _general_chitchat_reply(t["text"]) is None]
-    ) + 1
-    forced = customer_turns_so_far >= MAX_BOT_TURNS
     hard_trigger = _hard_trigger_category_team(message)
 
-    if hard_trigger is None and not forced:
+    if hard_trigger is None:
         history = [{"role": t["role"], "text": t["text"]} for t in prior_turns]
         context = (
             f"Order #{order_id}, product \"{item['product_name']}\", quantity {item['quantity']}, "
@@ -603,17 +586,16 @@ def chat_turn(
         classification = outcome
         reply_text = outcome["reply"]
     else:
-        # Hard-triggered or forced by the turn cap — either way, escalating.
-        # Priority/tone/confidence/reasoning always come from a real
-        # classification of the full transcript, never a fixed value; when
-        # hard-triggered, only category/team are overlaid from the keyword
-        # match (those two are reliable from wording alone — severity isn't).
+        # Hard-triggered — escalating. Priority/tone/confidence/reasoning
+        # always come from a real classification of the full transcript,
+        # never a fixed value; only category/team are overlaid from the
+        # keyword match (those two are reliable from wording alone —
+        # severity isn't).
         classification = classifier.build_ticket_result(
             _transcript(prior_turns + [{"role": "user", "text": message}]), manual_time_seconds=None, compare=False
         )
-        if hard_trigger is not None:
-            category, team = hard_trigger
-            classification = {**classification, "category": category.value, "team": team.value}
+        category, team = hard_trigger
+        classification = {**classification, "category": category.value, "team": team.value}
         reply_text = f"I've connected you with our {classification['team']} — they'll take it from here."
 
     npstore.add_chat_turn(order_id, item_id, "bot", reply_text)
