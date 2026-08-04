@@ -104,9 +104,8 @@ flowchart TD
     B -->|"Yes"| C["Answered directly\nnever escalated, doesn't count toward turn budget"]
     B -->|"No"| D{"Hard-trigger keyword?\nbroken, refund, can't log in, ..."}
     D -->|"Yes"| E["Escalate immediately, turn one"]
-    D -->|"No"| F["Bot tries to help\nup to 2 real turns"]
+    D -->|"No"| F["Bot tries to help"]
     F -->|"Model itself decides to escalate"| E
-    F -->|"2 turns used, still unresolved"| E
     E --> G["np_tickets row created\ntranscript copied into the ticket's own comment thread"]
     G --> H["Team: Routed -> In Progress -> Resolved"]
     H --> I["Customer rates the support experience (CSAT)"]
@@ -114,7 +113,7 @@ flowchart TD
 
 1. **Customer opens Help** on an order item — pure chit-chat (greetings, thanks, arithmetic) is answered directly; it's never escalated and doesn't count toward the turn budget.
 2. **A hard-trigger keyword** (broken, refund, can't log in, etc.) escalates immediately, on the very first real turn.
-3. **Otherwise, the bot tries to help** for up to 2 real turns — if the model itself decides to escalate, or the 2 turns run out with the issue still unresolved, it escalates the same way.
+3. **Otherwise, the bot tries to help** — if the model itself decides the issue needs a human, it escalates.
 4. **Escalating creates an `np_tickets` row**, with the full chat transcript copied straight into the ticket's own comment thread — nothing is lost switching from bot to human.
 5. **The team works it** the same way as TicketTrident: Routed → In Progress → Resolved.
 6. **The customer rates the support experience** (CSAT) once it's resolved.
