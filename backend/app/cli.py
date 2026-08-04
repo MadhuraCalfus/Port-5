@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Command-line interface for TicketTrident.
+"""Command-line interface for NykaaPulse.
 
 Usage:
     python -m app.cli route "The app keeps crashing when I upload a photo"
     python -m app.cli demo              # run all 30 bundled sample tickets
     python -m app.cli eval-feedback     # accuracy over the hand-labeled feedback sample set
     python -m app.cli health
+    python -m app.cli gen-seed-csv      # write the synthetic 2-year demo CSVs
+    python -m app.cli import-seed-csv   # import those CSVs into the database
 """
 import argparse
 import json
@@ -17,7 +19,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from . import classifier, feedback_eval, store
+from . import classifier, feedback_eval, seed_csv, store
 from .sample_tickets import SAMPLE_TICKETS
 
 RESET = "\033[0m"
@@ -100,8 +102,29 @@ def cmd_eval_feedback(args) -> None:
     print(f"All three correct:   {summary['all_three_correct']}%")
 
 
+def cmd_gen_seed_csv(args) -> None:
+    """Writes the synthetic 2-year demo CSVs to backend/data/seed/ — no
+    database writes here, just files you can open and inspect first."""
+    paths = seed_csv.generate_all()
+    print(f"{BOLD}Wrote {len(paths)} CSV file(s):{RESET}")
+    for p in paths:
+        print(f"  {p}")
+
+
+def cmd_import_seed_csv(args) -> None:
+    """Reads the CSVs written by gen-seed-csv and inserts them — Ticket
+    Trident tickets/surveys and Nykaa Pulse orders/reviews, all attributed to
+    a small pool of demo login accounts (see seed_csv.DEMO_USERS)."""
+    counts = seed_csv.import_all()
+    print(f"{BOLD}Imported {counts['ticket_trident']}{RESET} Ticket Trident rows "
+          f"and {BOLD}{counts['nykaa_pulse']}{RESET} Nykaa Pulse rows.")
+    print(f"\nDemo login accounts (password: {seed_csv.DEMO_PASSWORD}):")
+    for u in seed_csv.DEMO_USERS:
+        print(f"  {u['email']}")
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="tickettrident", description="TicketTrident CLI")
+    parser = argparse.ArgumentParser(prog="nykaapulse", description="NykaaPulse CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_route = sub.add_parser("route", help="Classify a single ticket message")
@@ -118,6 +141,12 @@ def main() -> None:
 
     p_eval_feedback = sub.add_parser("eval-feedback", help="Run feedback_ai against the hand-labeled sample set and report accuracy")
     p_eval_feedback.set_defaults(func=cmd_eval_feedback)
+
+    p_gen_seed_csv = sub.add_parser("gen-seed-csv", help="Write the synthetic 2-year demo CSVs to backend/data/seed/")
+    p_gen_seed_csv.set_defaults(func=cmd_gen_seed_csv)
+
+    p_import_seed_csv = sub.add_parser("import-seed-csv", help="Import the demo CSVs from backend/data/seed/ into the database")
+    p_import_seed_csv.set_defaults(func=cmd_import_seed_csv)
 
     args = parser.parse_args()
     args.func(args)

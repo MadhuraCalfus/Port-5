@@ -1,0 +1,221 @@
+user_email,category,feedback,rating,survey_response,date
+aisha.demo@example.com,Order Issue,My package arrived damaged and a couple of items were missing from the box.,1,"Would not recommend, this didn't work out well.",2024-08-04T21:08:36.362466+00:00
+rohan.demo@example.com,Payments & Refunds,I was charged twice for the same order and need one of the charges reversed.,5,"Really happy with how this turned out, will shop again.",2024-08-06T08:54:19.724060+00:00
+priya.demo@example.com,Returns & Replacements,"I'd like to cancel this return request, I've changed my mind and want to keep the item.",5,Exactly what I was hoping for.,2024-08-10T10:54:24.535627+00:00
+karan.demo@example.com,Product Quality & Safety,The product arrived with a broken safety seal and I'm not sure it's safe to use.,3,"It was okay, nothing special either way.",2024-08-13T15:10:33.159634+00:00
+sneha.demo@example.com,App/Website Issue,The checkout page keeps freezing right before I can complete payment.,3,"It was okay, nothing special either way.",2024-08-18T12:07:50.275017+00:00
+aisha.demo@example.com,Account Access,I forgot my password and the reset email never arrived.,4,"Pretty good overall, minor things could be better.",2024-08-21T15:49:37.443446+00:00
+rohan.demo@example.com,Seller/Vendor Issue,The third-party seller for this item hasn't responded to my message in several days.,4,"Pretty good overall, minor things could be better.",2024-08-25T15:20:29.880255+00:00
+priya.demo@example.com,General Inquiry,"I've noticed response times have gotten a bit slower lately, just flagging it.",5,Excellent experience end to end.,2024-08-26T13:21:51.481724+00:00
+karan.demo@example.com,Order Issue,Tracking shows my order left the warehouse three days ago and hasn't moved since.,4,"Pretty good overall, minor things could be better.",2024-08-30T21:28:59.071968+00:00
+sneha.demo@example.com,Payments & Refunds,My wallet balance doesn't match what I'd expect after a recent refund.,4,"Pretty good overall, minor things could be better.",2024-09-02T01:15:00.375584+00:00
+aisha.demo@example.com,Returns & Replacements,"I want to return this item, it just isn't what I expected from the photos.",4,"Happy with this, would recommend.",2024-09-05T22:50:47.899375+00:00
+rohan.demo@example.com,Product Quality & Safety,The product arrived with a broken safety seal and I'm not sure it's safe to use.,2,Disappointed with parts of this.,2024-09-10T03:29:25.026982+00:00
+priya.demo@example.com,App/Website Issue,The checkout page keeps freezing right before I can complete payment.,2,"Not great, a few things went wrong.",2024-09-12T01:00:55.059648+00:00
+karan.demo@example.com,Account Access,I'm locked out of my account and need help resetting access.,4,"Happy with this, would recommend.",2024-09-15T21:25:15.655364+00:00
+sneha.demo@example.com,Seller/Vendor Issue,The third-party seller for this item hasn't responded to my message in several days.,2,Disappointed with parts of this.,2024-09-20T13:53:46.982578+00:00
+aisha.demo@example.com,General Inquiry,What are your customer service hours on weekends?,4,"Happy with this, would recommend.",2024-09-23T14:20:25.768078+00:00
+rohan.demo@example.com,Order Issue,My package arrived damaged and a couple of items were missing from the box.,4,"Pretty good overall, minor things could be better.",2024-09-25T22:58:35.145539+00:00
+priya.demo@example.com,Payments & Refunds,I was charged twice for the same order and need one of the charges reversed.,4,"Pretty good overall, minor things could be better.",2024-09-30T09:31:54.601567+00:00
+karan.demo@example.com,Returns & Replacements,I'd like to exchange this for a different shade — the one I got doesn't match my skin tone.,4,"Pretty good overall, minor things could be better.",2024-10-04T09:23:01.310677+00:00
+sneha.demo@example.com,Product Quality & Safety,I had a mild allergic reaction after using this and wanted to flag it.,3,"Average experience, gets the job done.",2024-10-05T07:34:21.414815+00:00
+aisha.demo@example.com,App/Website Issue,Product pages aren't loading properly on the site today.,4,"Pretty good overall, minor things could be better.",2024-10-11T01:07:25.286381+00:00
+rohan.demo@example.com,Account Access,I forgot my password and the reset email never arrived.,4,"Happy with this, would recommend.",2024-10-14T01:22:14.667487+00:00
+priya.demo@example.com,Seller/Vendor Issue,The third-party seller for this item hasn't responded to my message in several days.,1,Pretty frustrating experience overall.,2024-10-16T07:36:09.870187+00:00
+karan.demo@example.com,General Inquiry,"Just wanted to say the new packaging redesign looks great, nice work.",4,"Pretty good overall, minor things could be better.",2024-10-19T02:17:57.222657+00:00
+sneha.demo@example.com,Order Issue,The package I received had the wrong product inside — I ordered something else entirely.,5,Exactly what I was hoping for.,2024-10-24T20:01:26.564622+00:00
+aisha.demo@example.com,Payments & Refunds,My refund for a returned item still hasn't shown up in my account after two weeks.,4,"Happy with this, would recommend.",2024-10-26T07:20:22.242399+00:00
+rohan.demo@example.com,Returns & Replacements,"I'd like to cancel this return request, I've changed my mind and want to keep the item.",5,"Really happy with how this turned out, will shop again.",2024-10-28T21:46:56.658910+00:00
+priya.demo@example.com,Product Quality & Safety,The product arrived with a broken safety seal and I'm not sure it's safe to use.,2,"Not great, a few things went wrong.",2024-11-01T06:04:05.821181+00:00
+karan.demo@example.com,App/Website Issue,Product pages aren't loading properly on the site today.,1,"Would not recommend, this didn't work out well.",2024-11-06T20:07:27.476063+00:00
+sneha.demo@example.com,Account Access,I'm locked out of my account and need help resetting access.,5,"Really happy with how this turned out, will shop again.",2024-11-09T10:34:22.723636+00:00
+aisha.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",4,"Pretty good overall, minor things could be better.",2024-11-13T09:13:04.584739+00:00
+rohan.demo@example.com,General Inquiry,What are your customer service hours on weekends?,5,Exactly what I was hoping for.,2024-11-16T11:38:43.415417+00:00
+priya.demo@example.com,Order Issue,My order #1032 still hasn't arrived and it's been over a week since the estimated delivery date.,4,"Happy with this, would recommend.",2024-11-19T05:42:47.257611+00:00
+karan.demo@example.com,Payments & Refunds,I think I was overcharged compared to the price shown on the product page.,5,Exactly what I was hoping for.,2024-11-23T21:10:08.542329+00:00
+sneha.demo@example.com,Returns & Replacements,The return portal says my order isn't eligible even though it's within the return window.,3,"It was okay, nothing special either way.",2024-11-25T10:21:33.046878+00:00
+aisha.demo@example.com,Product Quality & Safety,The batch code on this product shows it expired two months ago.,3,"It was okay, nothing special either way.",2024-11-29T06:51:05.867932+00:00
+rohan.demo@example.com,App/Website Issue,Product pages aren't loading properly on the site today.,3,"Average experience, gets the job done.",2024-12-03T10:49:18.625280+00:00
+priya.demo@example.com,Account Access,My OTP codes have stopped arriving by SMS for the past couple of days.,4,"Pretty good overall, minor things could be better.",2024-12-06T03:38:17.256119+00:00
+karan.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",2,"Not great, a few things went wrong.",2024-12-10T05:08:51.364867+00:00
+sneha.demo@example.com,General Inquiry,What are your customer service hours on weekends?,5,"Really happy with how this turned out, will shop again.",2024-12-12T16:40:26.612357+00:00
+aisha.demo@example.com,Order Issue,Tracking shows my order left the warehouse three days ago and hasn't moved since.,5,Excellent experience end to end.,2024-12-16T09:50:01.956253+00:00
+rohan.demo@example.com,Payments & Refunds,My refund for a returned item still hasn't shown up in my account after two weeks.,4,"Pretty good overall, minor things could be better.",2024-12-17T18:24:14.616550+00:00
+priya.demo@example.com,Returns & Replacements,"I want to return this item, it just isn't what I expected from the photos.",4,"Happy with this, would recommend.",2024-12-21T15:30:48.169355+00:00
+karan.demo@example.com,Product Quality & Safety,The product arrived with a broken safety seal and I'm not sure it's safe to use.,4,"Happy with this, would recommend.",2024-12-25T03:56:26.296472+00:00
+sneha.demo@example.com,App/Website Issue,"I keep getting logged out mid-checkout, which is really disruptive.",5,Excellent experience end to end.,2024-12-27T20:50:59.016725+00:00
+aisha.demo@example.com,Account Access,I can't log into my account even though I'm sure my password is correct.,5,"Really happy with how this turned out, will shop again.",2024-12-31T15:51:56.334051+00:00
+rohan.demo@example.com,Seller/Vendor Issue,The third-party seller for this item hasn't responded to my message in several days.,4,"Happy with this, would recommend.",2025-01-03T14:22:36.506809+00:00
+priya.demo@example.com,General Inquiry,"Just wanted to say the new packaging redesign looks great, nice work.",1,Pretty frustrating experience overall.,2025-01-07T11:07:07.694232+00:00
+karan.demo@example.com,Order Issue,Tracking shows my order left the warehouse three days ago and hasn't moved since.,5,Excellent experience end to end.,2025-01-11T20:52:26.344259+00:00
+sneha.demo@example.com,Payments & Refunds,My wallet balance doesn't match what I'd expect after a recent refund.,2,"Not great, a few things went wrong.",2025-01-14T09:22:21.437095+00:00
+aisha.demo@example.com,Returns & Replacements,I'd like to exchange this for a different shade — the one I got doesn't match my skin tone.,4,"Happy with this, would recommend.",2025-01-17T17:45:27.842983+00:00
+rohan.demo@example.com,Product Quality & Safety,"I'm fairly sure this is a counterfeit, the box print looks different from what I got last time.",1,"Would not recommend, this didn't work out well.",2025-01-20T14:11:21.158682+00:00
+priya.demo@example.com,App/Website Issue,The search bar returns no results even for products I know you sell.,5,"Really happy with how this turned out, will shop again.",2025-01-24T02:19:37.587781+00:00
+karan.demo@example.com,Account Access,My OTP codes have stopped arriving by SMS for the past couple of days.,5,Exactly what I was hoping for.,2025-01-29T10:32:37.805441+00:00
+sneha.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",2,Disappointed with parts of this.,2025-01-31T21:45:47.708162+00:00
+aisha.demo@example.com,General Inquiry,"I've noticed response times have gotten a bit slower lately, just flagging it.",5,Excellent experience end to end.,2025-02-04T02:57:43.692975+00:00
+rohan.demo@example.com,Order Issue,My package arrived damaged and a couple of items were missing from the box.,4,"Pretty good overall, minor things could be better.",2025-02-06T03:25:36.073919+00:00
+priya.demo@example.com,Payments & Refunds,My wallet balance doesn't match what I'd expect after a recent refund.,4,"Happy with this, would recommend.",2025-02-11T03:36:06.602335+00:00
+karan.demo@example.com,Returns & Replacements,"I'd like to cancel this return request, I've changed my mind and want to keep the item.",3,"Average experience, gets the job done.",2025-02-12T18:52:10.862689+00:00
+sneha.demo@example.com,Product Quality & Safety,"I'm fairly sure this is a counterfeit, the box print looks different from what I got last time.",5,"Really happy with how this turned out, will shop again.",2025-02-16T18:25:31.786810+00:00
+aisha.demo@example.com,App/Website Issue,Product pages aren't loading properly on the site today.,4,"Pretty good overall, minor things could be better.",2025-02-21T22:21:01.388791+00:00
+rohan.demo@example.com,Account Access,My OTP codes have stopped arriving by SMS for the past couple of days.,5,Excellent experience end to end.,2025-02-24T05:11:04.874060+00:00
+priya.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",5,Exactly what I was hoping for.,2025-02-27T07:12:18.309892+00:00
+karan.demo@example.com,General Inquiry,Do you have any upcoming sales planned for this category?,4,"Pretty good overall, minor things could be better.",2025-03-03T00:23:48.950163+00:00
+sneha.demo@example.com,Order Issue,Tracking shows my order left the warehouse three days ago and hasn't moved since.,2,Disappointed with parts of this.,2025-03-06T19:47:24.154019+00:00
+aisha.demo@example.com,Payments & Refunds,My refund for a returned item still hasn't shown up in my account after two weeks.,2,Disappointed with parts of this.,2025-03-09T22:58:36.113379+00:00
+rohan.demo@example.com,Returns & Replacements,The return portal says my order isn't eligible even though it's within the return window.,4,"Pretty good overall, minor things could be better.",2025-03-11T15:35:46.196559+00:00
+priya.demo@example.com,Product Quality & Safety,The product arrived with a broken safety seal and I'm not sure it's safe to use.,1,"Would not recommend, this didn't work out well.",2025-03-14T09:24:57.319526+00:00
+karan.demo@example.com,App/Website Issue,"I keep getting logged out mid-checkout, which is really disruptive.",5,"Really happy with how this turned out, will shop again.",2025-03-18T13:49:02.366363+00:00
+sneha.demo@example.com,Account Access,I forgot my password and the reset email never arrived.,5,Exactly what I was hoping for.,2025-03-21T18:22:55.371359+00:00
+aisha.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",4,"Happy with this, would recommend.",2025-03-24T22:17:43.689364+00:00
+rohan.demo@example.com,General Inquiry,What are your customer service hours on weekends?,5,"Really happy with how this turned out, will shop again.",2025-03-30T10:59:39.134262+00:00
+priya.demo@example.com,Order Issue,My order #1072 still hasn't arrived and it's been over a week since the estimated delivery date.,1,Pretty frustrating experience overall.,2025-04-02T14:12:11.425088+00:00
+karan.demo@example.com,Payments & Refunds,My refund for a returned item still hasn't shown up in my account after two weeks.,4,"Happy with this, would recommend.",2025-04-04T05:45:41.443009+00:00
+sneha.demo@example.com,Returns & Replacements,"I'd like to cancel this return request, I've changed my mind and want to keep the item.",1,"Would not recommend, this didn't work out well.",2025-04-08T14:17:46.638350+00:00
+aisha.demo@example.com,Product Quality & Safety,The batch code on this product shows it expired two months ago.,2,"Not great, a few things went wrong.",2025-04-11T03:35:24.725061+00:00
+rohan.demo@example.com,App/Website Issue,"I keep getting logged out mid-checkout, which is really disruptive.",5,Exactly what I was hoping for.,2025-04-16T00:57:07.671567+00:00
+priya.demo@example.com,Account Access,I forgot my password and the reset email never arrived.,5,Exactly what I was hoping for.,2025-04-18T00:08:31.336497+00:00
+karan.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",5,"Really happy with how this turned out, will shop again.",2025-04-20T18:10:33.875462+00:00
+sneha.demo@example.com,General Inquiry,Do you have any upcoming sales planned for this category?,5,Excellent experience end to end.,2025-04-24T00:51:42.786300+00:00
+aisha.demo@example.com,Order Issue,Tracking shows my order left the warehouse three days ago and hasn't moved since.,4,"Happy with this, would recommend.",2025-04-28T07:31:23.556681+00:00
+rohan.demo@example.com,Payments & Refunds,The coupon code I applied at checkout didn't actually reduce the total.,4,"Happy with this, would recommend.",2025-04-30T18:01:19.561235+00:00
+priya.demo@example.com,Returns & Replacements,Can you help me start a replacement request for a product that arrived in the wrong size?,2,"Not great, a few things went wrong.",2025-05-05T01:11:41.624972+00:00
+karan.demo@example.com,Product Quality & Safety,I had a mild allergic reaction after using this and wanted to flag it.,4,"Happy with this, would recommend.",2025-05-09T07:44:52.627736+00:00
+sneha.demo@example.com,App/Website Issue,The app crashes every time I try to open my wishlist.,2,"Not great, a few things went wrong.",2025-05-11T03:51:41.547238+00:00
+aisha.demo@example.com,Account Access,I forgot my password and the reset email never arrived.,4,"Pretty good overall, minor things could be better.",2025-05-13T22:53:44.877080+00:00
+rohan.demo@example.com,Seller/Vendor Issue,The third-party seller for this item hasn't responded to my message in several days.,4,"Happy with this, would recommend.",2025-05-19T14:55:38.683910+00:00
+priya.demo@example.com,General Inquiry,"I've noticed response times have gotten a bit slower lately, just flagging it.",5,Exactly what I was hoping for.,2025-05-21T11:47:26.151627+00:00
+karan.demo@example.com,Order Issue,"I'd like to cancel order #1088, it hasn't shipped yet and I no longer need it.",5,"Really happy with how this turned out, will shop again.",2025-05-23T13:39:00.655941+00:00
+sneha.demo@example.com,Payments & Refunds,My wallet balance doesn't match what I'd expect after a recent refund.,4,"Happy with this, would recommend.",2025-05-26T18:29:49.500816+00:00
+aisha.demo@example.com,Returns & Replacements,"I'd like to cancel this return request, I've changed my mind and want to keep the item.",1,Pretty frustrating experience overall.,2025-05-30T06:59:57.990893+00:00
+rohan.demo@example.com,Product Quality & Safety,The product arrived with a broken safety seal and I'm not sure it's safe to use.,5,Excellent experience end to end.,2025-06-04T04:16:50.950315+00:00
+priya.demo@example.com,App/Website Issue,The search bar returns no results even for products I know you sell.,4,"Happy with this, would recommend.",2025-06-08T00:08:03.907549+00:00
+karan.demo@example.com,Account Access,I forgot my password and the reset email never arrived.,4,"Pretty good overall, minor things could be better.",2025-06-10T05:30:00.799700+00:00
+sneha.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",4,"Happy with this, would recommend.",2025-06-12T11:40:43.317741+00:00
+aisha.demo@example.com,General Inquiry,Do you have any upcoming sales planned for this category?,1,Pretty frustrating experience overall.,2025-06-16T18:34:52.655368+00:00
+rohan.demo@example.com,Order Issue,The package I received had the wrong product inside — I ordered something else entirely.,5,Excellent experience end to end.,2025-06-21T22:49:31.598064+00:00
+priya.demo@example.com,Payments & Refunds,I think I was overcharged compared to the price shown on the product page.,3,"It was okay, nothing special either way.",2025-06-23T21:12:03.374556+00:00
+karan.demo@example.com,Returns & Replacements,"I'd like to cancel this return request, I've changed my mind and want to keep the item.",5,Exactly what I was hoping for.,2025-06-28T13:01:20.451783+00:00
+sneha.demo@example.com,Product Quality & Safety,The product arrived with a broken safety seal and I'm not sure it's safe to use.,1,Pretty frustrating experience overall.,2025-07-01T13:04:51.035125+00:00
+aisha.demo@example.com,App/Website Issue,The search bar returns no results even for products I know you sell.,3,"It was okay, nothing special either way.",2025-07-02T07:55:52.817194+00:00
+rohan.demo@example.com,Account Access,My OTP codes have stopped arriving by SMS for the past couple of days.,1,Pretty frustrating experience overall.,2025-07-07T18:59:48.031884+00:00
+priya.demo@example.com,Seller/Vendor Issue,The third-party seller for this item hasn't responded to my message in several days.,5,Excellent experience end to end.,2025-07-11T00:11:16.263958+00:00
+karan.demo@example.com,General Inquiry,"I've noticed response times have gotten a bit slower lately, just flagging it.",5,Excellent experience end to end.,2025-07-13T21:45:59.645948+00:00
+sneha.demo@example.com,Order Issue,"I'd like to cancel order #1104, it hasn't shipped yet and I no longer need it.",4,"Happy with this, would recommend.",2025-07-16T10:18:58.025542+00:00
+aisha.demo@example.com,Payments & Refunds,My wallet balance doesn't match what I'd expect after a recent refund.,2,"Not great, a few things went wrong.",2025-07-20T21:15:14.234498+00:00
+rohan.demo@example.com,Returns & Replacements,Can you help me start a replacement request for a product that arrived in the wrong size?,1,"Would not recommend, this didn't work out well.",2025-07-22T15:08:11.259702+00:00
+priya.demo@example.com,Product Quality & Safety,The product arrived with a broken safety seal and I'm not sure it's safe to use.,2,"Not great, a few things went wrong.",2025-07-26T22:24:28.089279+00:00
+karan.demo@example.com,App/Website Issue,The app crashes every time I try to open my wishlist.,4,"Pretty good overall, minor things could be better.",2025-07-30T07:46:22.120987+00:00
+sneha.demo@example.com,Account Access,I'm locked out of my account and need help resetting access.,3,"It was okay, nothing special either way.",2025-08-04T03:46:46.024719+00:00
+aisha.demo@example.com,Seller/Vendor Issue,The third-party seller for this item hasn't responded to my message in several days.,5,Exactly what I was hoping for.,2025-08-07T06:09:58.018452+00:00
+rohan.demo@example.com,General Inquiry,Do you have any upcoming sales planned for this category?,4,"Happy with this, would recommend.",2025-08-08T18:04:07.378261+00:00
+priya.demo@example.com,Order Issue,The package I received had the wrong product inside — I ordered something else entirely.,5,Exactly what I was hoping for.,2025-08-12T19:08:48.856809+00:00
+karan.demo@example.com,Payments & Refunds,My refund for a returned item still hasn't shown up in my account after two weeks.,2,Disappointed with parts of this.,2025-08-15T03:58:03.503739+00:00
+sneha.demo@example.com,Returns & Replacements,"I'd like to cancel this return request, I've changed my mind and want to keep the item.",2,"Not great, a few things went wrong.",2025-08-20T16:48:50.072264+00:00
+aisha.demo@example.com,Product Quality & Safety,"I'm fairly sure this is a counterfeit, the box print looks different from what I got last time.",4,"Happy with this, would recommend.",2025-08-23T21:46:55.349608+00:00
+rohan.demo@example.com,App/Website Issue,The app crashes every time I try to open my wishlist.,5,"Really happy with how this turned out, will shop again.",2025-08-25T12:35:33.826249+00:00
+priya.demo@example.com,Account Access,I can't log into my account even though I'm sure my password is correct.,4,"Happy with this, would recommend.",2025-08-29T21:06:32.645375+00:00
+karan.demo@example.com,Seller/Vendor Issue,The third-party seller for this item hasn't responded to my message in several days.,2,Disappointed with parts of this.,2025-09-02T02:57:02.015111+00:00
+sneha.demo@example.com,General Inquiry,"I've noticed response times have gotten a bit slower lately, just flagging it.",5,"Really happy with how this turned out, will shop again.",2025-09-04T02:06:32.874714+00:00
+aisha.demo@example.com,Order Issue,My order #1120 still hasn't arrived and it's been over a week since the estimated delivery date.,5,Excellent experience end to end.,2025-09-09T06:00:19.735685+00:00
+rohan.demo@example.com,Payments & Refunds,I was charged twice for the same order and need one of the charges reversed.,5,Excellent experience end to end.,2025-09-11T21:56:23.980913+00:00
+priya.demo@example.com,Returns & Replacements,"I want to return this item, it just isn't what I expected from the photos.",5,Exactly what I was hoping for.,2025-09-15T23:09:56.919567+00:00
+karan.demo@example.com,Product Quality & Safety,The batch code on this product shows it expired two months ago.,3,"It was okay, nothing special either way.",2025-09-18T13:17:24.608139+00:00
+sneha.demo@example.com,App/Website Issue,"I keep getting logged out mid-checkout, which is really disruptive.",4,"Happy with this, would recommend.",2025-09-20T07:08:45.171782+00:00
+aisha.demo@example.com,Account Access,I forgot my password and the reset email never arrived.,5,Exactly what I was hoping for.,2025-09-24T14:26:38.186282+00:00
+rohan.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",4,"Pretty good overall, minor things could be better.",2025-09-27T00:30:25.307932+00:00
+priya.demo@example.com,General Inquiry,"I've noticed response times have gotten a bit slower lately, just flagging it.",2,Disappointed with parts of this.,2025-10-03T01:59:59.297642+00:00
+karan.demo@example.com,Order Issue,"I'd like to cancel order #1128, it hasn't shipped yet and I no longer need it.",4,"Happy with this, would recommend.",2025-10-06T06:22:21.647038+00:00
+sneha.demo@example.com,Payments & Refunds,I was charged twice for the same order and need one of the charges reversed.,5,Excellent experience end to end.,2025-10-09T10:59:04.641516+00:00
+aisha.demo@example.com,Returns & Replacements,The return portal says my order isn't eligible even though it's within the return window.,5,Excellent experience end to end.,2025-10-11T05:14:44.597610+00:00
+rohan.demo@example.com,Product Quality & Safety,I had a mild allergic reaction after using this and wanted to flag it.,4,"Happy with this, would recommend.",2025-10-13T19:16:31.139461+00:00
+priya.demo@example.com,App/Website Issue,Product pages aren't loading properly on the site today.,5,Exactly what I was hoping for.,2025-10-19T14:19:17.024420+00:00
+karan.demo@example.com,Account Access,I can't log into my account even though I'm sure my password is correct.,4,"Pretty good overall, minor things could be better.",2025-10-23T03:17:06.232527+00:00
+sneha.demo@example.com,Seller/Vendor Issue,The third-party seller for this item hasn't responded to my message in several days.,2,Disappointed with parts of this.,2025-10-23T21:16:18.311082+00:00
+aisha.demo@example.com,General Inquiry,What are your customer service hours on weekends?,5,Exactly what I was hoping for.,2025-10-28T10:05:45.664398+00:00
+rohan.demo@example.com,Order Issue,"I'd like to cancel order #1136, it hasn't shipped yet and I no longer need it.",5,Excellent experience end to end.,2025-10-30T12:05:16.821093+00:00
+priya.demo@example.com,Payments & Refunds,I was charged twice for the same order and need one of the charges reversed.,1,Pretty frustrating experience overall.,2025-11-04T21:52:05.017541+00:00
+karan.demo@example.com,Returns & Replacements,"I want to return this item, it just isn't what I expected from the photos.",4,"Pretty good overall, minor things could be better.",2025-11-08T06:14:41.220382+00:00
+sneha.demo@example.com,Product Quality & Safety,"I'm fairly sure this is a counterfeit, the box print looks different from what I got last time.",4,"Happy with this, would recommend.",2025-11-09T16:20:56.003904+00:00
+aisha.demo@example.com,App/Website Issue,"I keep getting logged out mid-checkout, which is really disruptive.",5,Exactly what I was hoping for.,2025-11-14T01:19:30.128709+00:00
+rohan.demo@example.com,Account Access,I forgot my password and the reset email never arrived.,5,Exactly what I was hoping for.,2025-11-17T14:41:26.027740+00:00
+priya.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",5,Exactly what I was hoping for.,2025-11-20T02:11:19.614527+00:00
+karan.demo@example.com,General Inquiry,"I've noticed response times have gotten a bit slower lately, just flagging it.",5,Excellent experience end to end.,2025-11-25T05:55:11.580555+00:00
+sneha.demo@example.com,Order Issue,The package I received had the wrong product inside — I ordered something else entirely.,4,"Pretty good overall, minor things could be better.",2025-11-27T05:34:14.290406+00:00
+aisha.demo@example.com,Payments & Refunds,The coupon code I applied at checkout didn't actually reduce the total.,4,"Pretty good overall, minor things could be better.",2025-11-29T22:21:15.031157+00:00
+rohan.demo@example.com,Returns & Replacements,The return portal says my order isn't eligible even though it's within the return window.,3,"It was okay, nothing special either way.",2025-12-04T05:56:02.482518+00:00
+priya.demo@example.com,Product Quality & Safety,I had a mild allergic reaction after using this and wanted to flag it.,5,Exactly what I was hoping for.,2025-12-08T03:39:35.069414+00:00
+karan.demo@example.com,App/Website Issue,The checkout page keeps freezing right before I can complete payment.,4,"Pretty good overall, minor things could be better.",2025-12-09T21:35:15.291937+00:00
+sneha.demo@example.com,Account Access,I'm locked out of my account and need help resetting access.,4,"Happy with this, would recommend.",2025-12-13T13:32:53.799011+00:00
+aisha.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",3,"It was okay, nothing special either way.",2025-12-18T22:45:19.649553+00:00
+rohan.demo@example.com,General Inquiry,"I've noticed response times have gotten a bit slower lately, just flagging it.",3,"It was okay, nothing special either way.",2025-12-21T05:53:45.328846+00:00
+priya.demo@example.com,Order Issue,My package arrived damaged and a couple of items were missing from the box.,1,Pretty frustrating experience overall.,2025-12-23T22:38:52.478057+00:00
+karan.demo@example.com,Payments & Refunds,My wallet balance doesn't match what I'd expect after a recent refund.,3,"It was okay, nothing special either way.",2025-12-27T12:22:12.594302+00:00
+sneha.demo@example.com,Returns & Replacements,"I'd like to cancel this return request, I've changed my mind and want to keep the item.",1,Pretty frustrating experience overall.,2025-12-29T15:49:01.223875+00:00
+aisha.demo@example.com,Product Quality & Safety,The batch code on this product shows it expired two months ago.,5,Excellent experience end to end.,2026-01-02T07:16:58.486065+00:00
+rohan.demo@example.com,App/Website Issue,The app crashes every time I try to open my wishlist.,5,"Really happy with how this turned out, will shop again.",2026-01-05T23:26:48.714015+00:00
+priya.demo@example.com,Account Access,I forgot my password and the reset email never arrived.,4,"Pretty good overall, minor things could be better.",2026-01-10T01:27:46.556130+00:00
+karan.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",2,Disappointed with parts of this.,2026-01-12T07:40:22.674995+00:00
+sneha.demo@example.com,General Inquiry,"Just wanted to say the new packaging redesign looks great, nice work.",2,"Not great, a few things went wrong.",2026-01-15T14:57:37.282356+00:00
+aisha.demo@example.com,Order Issue,My package arrived damaged and a couple of items were missing from the box.,3,"Average experience, gets the job done.",2026-01-18T12:12:58.344200+00:00
+rohan.demo@example.com,Payments & Refunds,My refund for a returned item still hasn't shown up in my account after two weeks.,2,"Not great, a few things went wrong.",2026-01-23T12:32:38.822830+00:00
+priya.demo@example.com,Returns & Replacements,"I'd like to cancel this return request, I've changed my mind and want to keep the item.",5,Exactly what I was hoping for.,2026-01-25T15:35:18.646670+00:00
+karan.demo@example.com,Product Quality & Safety,"I'm fairly sure this is a counterfeit, the box print looks different from what I got last time.",4,"Happy with this, would recommend.",2026-01-31T00:17:41.803677+00:00
+sneha.demo@example.com,App/Website Issue,The search bar returns no results even for products I know you sell.,5,Excellent experience end to end.,2026-02-03T04:59:54.432052+00:00
+aisha.demo@example.com,Account Access,My OTP codes have stopped arriving by SMS for the past couple of days.,5,Exactly what I was hoping for.,2026-02-04T04:12:23.161397+00:00
+rohan.demo@example.com,Seller/Vendor Issue,The third-party seller for this item hasn't responded to my message in several days.,1,"Would not recommend, this didn't work out well.",2026-02-08T00:14:27.737534+00:00
+priya.demo@example.com,General Inquiry,"I've noticed response times have gotten a bit slower lately, just flagging it.",4,"Pretty good overall, minor things could be better.",2026-02-12T15:16:15.976440+00:00
+karan.demo@example.com,Order Issue,The package I received had the wrong product inside — I ordered something else entirely.,3,"It was okay, nothing special either way.",2026-02-14T14:31:47.116776+00:00
+sneha.demo@example.com,Payments & Refunds,My refund for a returned item still hasn't shown up in my account after two weeks.,2,"Not great, a few things went wrong.",2026-02-17T16:37:52.167496+00:00
+aisha.demo@example.com,Returns & Replacements,"I want to return this item, it just isn't what I expected from the photos.",5,Exactly what I was hoping for.,2026-02-23T10:27:42.227465+00:00
+rohan.demo@example.com,Product Quality & Safety,I had a mild allergic reaction after using this and wanted to flag it.,5,"Really happy with how this turned out, will shop again.",2026-02-25T16:13:11.306096+00:00
+priya.demo@example.com,App/Website Issue,Product pages aren't loading properly on the site today.,4,"Happy with this, would recommend.",2026-02-28T17:08:13.266326+00:00
+karan.demo@example.com,Account Access,I can't log into my account even though I'm sure my password is correct.,5,Exactly what I was hoping for.,2026-03-04T23:35:50.291082+00:00
+sneha.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",4,"Pretty good overall, minor things could be better.",2026-03-08T09:14:40.158127+00:00
+aisha.demo@example.com,General Inquiry,"Just wanted to say the new packaging redesign looks great, nice work.",5,Exactly what I was hoping for.,2026-03-09T20:48:51.186109+00:00
+rohan.demo@example.com,Order Issue,The package I received had the wrong product inside — I ordered something else entirely.,4,"Happy with this, would recommend.",2026-03-12T22:05:01.403354+00:00
+priya.demo@example.com,Payments & Refunds,I was charged twice for the same order and need one of the charges reversed.,3,"It was okay, nothing special either way.",2026-03-17T06:08:25.402786+00:00
+karan.demo@example.com,Returns & Replacements,Can you help me start a replacement request for a product that arrived in the wrong size?,3,"Average experience, gets the job done.",2026-03-20T13:36:08.515393+00:00
+sneha.demo@example.com,Product Quality & Safety,The product arrived with a broken safety seal and I'm not sure it's safe to use.,5,Excellent experience end to end.,2026-03-24T00:43:49.730261+00:00
+aisha.demo@example.com,App/Website Issue,The search bar returns no results even for products I know you sell.,4,"Happy with this, would recommend.",2026-03-28T03:35:53.396486+00:00
+rohan.demo@example.com,Account Access,I forgot my password and the reset email never arrived.,5,"Really happy with how this turned out, will shop again.",2026-03-31T07:35:13.026964+00:00
+priya.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",1,Pretty frustrating experience overall.,2026-04-04T13:57:52.559092+00:00
+karan.demo@example.com,General Inquiry,"Just wanted to say the new packaging redesign looks great, nice work.",4,"Pretty good overall, minor things could be better.",2026-04-05T06:11:26.848509+00:00
+sneha.demo@example.com,Order Issue,My package arrived damaged and a couple of items were missing from the box.,4,"Pretty good overall, minor things could be better.",2026-04-09T12:05:36.372627+00:00
+aisha.demo@example.com,Payments & Refunds,I think I was overcharged compared to the price shown on the product page.,4,"Pretty good overall, minor things could be better.",2026-04-12T15:32:04.171624+00:00
+rohan.demo@example.com,Returns & Replacements,"I want to return this item, it just isn't what I expected from the photos.",3,"Average experience, gets the job done.",2026-04-17T13:08:42.457729+00:00
+priya.demo@example.com,Product Quality & Safety,This item leaked all over the box during shipping and the packaging was damaged.,4,"Happy with this, would recommend.",2026-04-19T01:00:28.658058+00:00
+karan.demo@example.com,App/Website Issue,The checkout page keeps freezing right before I can complete payment.,5,Excellent experience end to end.,2026-04-22T04:47:59.085374+00:00
+sneha.demo@example.com,Account Access,I forgot my password and the reset email never arrived.,5,Excellent experience end to end.,2026-04-26T07:24:17.567904+00:00
+aisha.demo@example.com,Seller/Vendor Issue,The third-party seller for this item hasn't responded to my message in several days.,5,"Really happy with how this turned out, will shop again.",2026-04-29T13:28:48.657351+00:00
+rohan.demo@example.com,General Inquiry,Do you have any upcoming sales planned for this category?,5,Exactly what I was hoping for.,2026-05-02T11:09:35.837804+00:00
+priya.demo@example.com,Order Issue,Tracking shows my order left the warehouse three days ago and hasn't moved since.,5,Exactly what I was hoping for.,2026-05-05T17:05:26.767597+00:00
+karan.demo@example.com,Payments & Refunds,I think I was overcharged compared to the price shown on the product page.,5,"Really happy with how this turned out, will shop again.",2026-05-11T01:34:47.379638+00:00
+sneha.demo@example.com,Returns & Replacements,I'd like to exchange this for a different shade — the one I got doesn't match my skin tone.,5,Excellent experience end to end.,2026-05-12T23:00:36.425424+00:00
+aisha.demo@example.com,Product Quality & Safety,I had a mild allergic reaction after using this and wanted to flag it.,4,"Pretty good overall, minor things could be better.",2026-05-17T13:07:18.624260+00:00
+rohan.demo@example.com,App/Website Issue,"I keep getting logged out mid-checkout, which is really disruptive.",5,"Really happy with how this turned out, will shop again.",2026-05-19T22:43:41.257293+00:00
+priya.demo@example.com,Account Access,I forgot my password and the reset email never arrived.,5,"Really happy with how this turned out, will shop again.",2026-05-21T18:44:49.431319+00:00
+karan.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",4,"Happy with this, would recommend.",2026-05-27T23:03:10.952119+00:00
+sneha.demo@example.com,General Inquiry,"Just wanted to say the new packaging redesign looks great, nice work.",5,"Really happy with how this turned out, will shop again.",2026-05-30T19:17:55.286359+00:00
+aisha.demo@example.com,Order Issue,My package arrived damaged and a couple of items were missing from the box.,4,"Pretty good overall, minor things could be better.",2026-06-03T12:52:20.766194+00:00
+rohan.demo@example.com,Payments & Refunds,My wallet balance doesn't match what I'd expect after a recent refund.,4,"Happy with this, would recommend.",2026-06-06T17:48:11.258302+00:00
+priya.demo@example.com,Returns & Replacements,I'd like to exchange this for a different shade — the one I got doesn't match my skin tone.,2,"Not great, a few things went wrong.",2026-06-09T20:12:38.870666+00:00
+karan.demo@example.com,Product Quality & Safety,I had a mild allergic reaction after using this and wanted to flag it.,3,"It was okay, nothing special either way.",2026-06-11T03:04:44.776175+00:00
+sneha.demo@example.com,App/Website Issue,The checkout page keeps freezing right before I can complete payment.,5,"Really happy with how this turned out, will shop again.",2026-06-15T10:04:15.116023+00:00
+aisha.demo@example.com,Account Access,I forgot my password and the reset email never arrived.,2,"Not great, a few things went wrong.",2026-06-17T22:29:40.236258+00:00
+rohan.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",3,"Average experience, gets the job done.",2026-06-21T19:58:46.580135+00:00
+priya.demo@example.com,General Inquiry,Do you have any upcoming sales planned for this category?,4,"Happy with this, would recommend.",2026-06-24T03:19:35.231979+00:00
+karan.demo@example.com,Order Issue,The package I received had the wrong product inside — I ordered something else entirely.,5,Excellent experience end to end.,2026-06-28T10:23:26.768745+00:00
+sneha.demo@example.com,Payments & Refunds,My wallet balance doesn't match what I'd expect after a recent refund.,3,"It was okay, nothing special either way.",2026-07-03T14:02:48.988614+00:00
+aisha.demo@example.com,Returns & Replacements,I'd like to exchange this for a different shade — the one I got doesn't match my skin tone.,3,"Average experience, gets the job done.",2026-07-04T18:11:57.568984+00:00
+rohan.demo@example.com,Product Quality & Safety,I had a mild allergic reaction after using this and wanted to flag it.,5,Exactly what I was hoping for.,2026-07-09T15:33:28.036331+00:00
+priya.demo@example.com,App/Website Issue,The checkout page keeps freezing right before I can complete payment.,4,"Happy with this, would recommend.",2026-07-11T23:51:55.105120+00:00
+karan.demo@example.com,Account Access,I forgot my password and the reset email never arrived.,4,"Pretty good overall, minor things could be better.",2026-07-15T05:33:40.476675+00:00
+sneha.demo@example.com,Seller/Vendor Issue,"I'm not sure this seller is authorized for this brand, the listing photos look off.",5,Excellent experience end to end.,2026-07-20T04:01:53.668817+00:00
+aisha.demo@example.com,General Inquiry,Do you have any upcoming sales planned for this category?,5,Excellent experience end to end.,2026-07-23T14:46:30.497423+00:00
+rohan.demo@example.com,Order Issue,The package I received had the wrong product inside — I ordered something else entirely.,5,Exactly what I was hoping for.,2026-07-25T15:07:12.085733+00:00
+priya.demo@example.com,Payments & Refunds,I think I was overcharged compared to the price shown on the product page.,4,"Happy with this, would recommend.",2026-07-29T10:49:48.361263+00:00
+karan.demo@example.com,Returns & Replacements,"I want to return this item, it just isn't what I expected from the photos.",4,"Pretty good overall, minor things could be better.",2026-07-31T02:15:00.273417+00:00
+sneha.demo@example.com,Product Quality & Safety,The batch code on this product shows it expired two months ago.,5,Exactly what I was hoping for.,2026-08-03T20:28:03.604674+00:00

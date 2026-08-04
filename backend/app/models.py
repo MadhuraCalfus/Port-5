@@ -4,13 +4,13 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class Category(str, Enum):
-    BILLING = "Billing"
-    TECHNICAL_ISSUE = "Technical Issue"
+    ORDER_ISSUE = "Order Issue"
+    PAYMENTS_REFUNDS = "Payments & Refunds"
+    RETURNS_REPLACEMENTS = "Returns & Replacements"
+    PRODUCT_QUALITY_SAFETY = "Product Quality & Safety"
+    APP_WEBSITE_ISSUE = "App/Website Issue"
     ACCOUNT_ACCESS = "Account Access"
-    BUG_REPORT = "Bug Report"
-    FEATURE_REQUEST = "Feature Request"
-    COMPLAINT = "Complaint"
-    SECURITY_CONCERN = "Security Concern"
+    SELLER_VENDOR_ISSUE = "Seller/Vendor Issue"
     GENERAL_INQUIRY = "General Inquiry"
 
 
@@ -21,14 +21,13 @@ class Priority(str, Enum):
 
 
 class Team(str, Enum):
-    BILLING_SUPPORT = "Billing Support"
-    TECHNICAL_SUPPORT = "Technical Support"
-    ENGINEERING = "Engineering"
-    ACCOUNT_MANAGEMENT = "Account Management"
-    PRODUCT_TEAM = "Product Team"
-    SECURITY_TEAM = "Security Team"
-    CUSTOMER_SUCCESS = "Customer Success"
     TRIAGE = "Triage"
+    ORDER_DELIVERY_TEAM = "Order & Delivery Team"
+    RETURNS_REFUNDS_TEAM = "Returns & Refunds Team"
+    PAYMENTS_BILLING_TEAM = "Payments & Billing Team"
+    PRODUCT_QUALITY_TEAM = "Product Quality Team"
+    TECHNICAL_SUPPORT_TEAM = "Technical Support Team"
+    ACCOUNT_LOYALTY_TEAM = "Account & Loyalty Team"
 
 
 class Tone(str, Enum):
@@ -58,7 +57,73 @@ class SentimentLabel(str, Enum):
     POSITIVE = "positive"
     NEUTRAL = "neutral"
     NEGATIVE = "negative"
-    MIXED = "mixed"
+
+
+class FeedbackCategory(str, Enum):
+    """The fixed, closed top-level taxonomy every piece of feedback is
+    bucketed into. Distinct from the finer-grained `theme` field on
+    FeedbackAnalysis (a sub-topic within a category, e.g. "Broken Seal"
+    under PACKAGING_DAMAGE) — category is a closed set an LLM's structured
+    output can strictly enforce; theme is closer to open vocabulary (see
+    CATEGORY_THEMES below). GENERAL_PRAISE_OTHER is a deliberate escape
+    valve for blank/near-empty/no-specific-topic input, not a 11th "real"
+    category — see feedback_ai.SYSTEM_PROMPT for when it's used. Not to be
+    confused with the unrelated `Category` enum above, which drives ticket
+    routing."""
+
+    PRODUCT_QUALITY_FIT = "Product Quality & Fit"
+    PACKAGING_DAMAGE = "Packaging & Damage"
+    DELIVERY_LOGISTICS = "Delivery & Logistics"
+    REVIEW_APP_FLOW_FRICTION = "Review & App Flow Friction"
+    AUTHENTICITY_TRUST = "Authenticity & Trust"
+    PERSONALIZATION_MISMATCH = "Personalization Mismatch"
+    PRICING_OFFERS = "Pricing & Offers"
+    REWARDS_LOYALTY = "Rewards & Loyalty"
+    CUSTOMER_SUPPORT = "Customer Support"
+    GENERAL_PRAISE_OTHER = "General Praise / Other"
+
+
+# Reference sub-themes per category — feedback_ai's classifier is guided
+# toward these but may coin a new theme when nothing here fits well (theme
+# is a plain string field on FeedbackAnalysis, not a closed enum, precisely
+# to allow that escape hatch).
+CATEGORY_THEMES: dict[str, list[str]] = {
+    FeedbackCategory.PRODUCT_QUALITY_FIT.value: [
+        "Didn't Suit Skin Type", "Wrong Shade", "Poor Fragrance", "Short Shelf Life",
+        "Inconsistent Quality", "Formula Issue",
+    ],
+    FeedbackCategory.PACKAGING_DAMAGE.value: [
+        "Leaked in Transit", "Broken Seal", "Tampered Packaging", "Cracked Container",
+        "Missing Item in Box",
+    ],
+    FeedbackCategory.DELIVERY_LOGISTICS.value: [
+        "Late Delivery", "Wrong Item Shipped", "Non-Delivery", "Courier Behaviour",
+        "Lost Package",
+    ],
+    FeedbackCategory.REVIEW_APP_FLOW_FRICTION.value: [
+        "Rating Reset Mid-Order", "Forced Fields", "Redundant Re-selection",
+        "App Crash", "Checkout Bug", "Slow Loading",
+    ],
+    FeedbackCategory.AUTHENTICITY_TRUST.value: [
+        "Suspected Counterfeit", "Missing Seal", "Ingredient Mismatch",
+    ],
+    FeedbackCategory.PERSONALIZATION_MISMATCH.value: [
+        "Beauty Portfolio Mismatch", "Irrelevant Recommendation", "Shade Finder Inaccurate",
+    ],
+    FeedbackCategory.PRICING_OFFERS.value: [
+        "Coupon Not Applied", "Price Drop After Purchase", "Hidden Charges", "Refund Delay",
+    ],
+    FeedbackCategory.REWARDS_LOYALTY.value: [
+        "Points Not Credited", "Moderation Delay", "Tier Benefits Unclear",
+    ],
+    FeedbackCategory.CUSTOMER_SUPPORT.value: [
+        "Slow Response", "Unhelpful Agent", "Helpful Support", "Ticket Resolution",
+    ],
+    FeedbackCategory.GENERAL_PRAISE_OTHER.value: [
+        "Overall Satisfaction", "Great Product", "Reliable Brand",
+        "General Comments", "Mixed Feedback", "Spam", "Insufficient Detail", "Unclassified",
+    ],
+}
 
 
 class TicketClassification(BaseModel):
@@ -82,11 +147,11 @@ class FeedbackAnalysis(BaseModel):
 
     sentiment_label: SentimentLabel
     sentiment_score: float = Field(ge=-1, le=1, description="-1 (very negative) to 1 (very positive)")
+    category: FeedbackCategory = Field(description="The single fixed top-level category this feedback belongs to")
     theme: str = Field(
-        min_length=1,
-        max_length=80,
-        description="A short, specific label for the underlying topic (e.g. 'checkout latency', "
-        "'duplicate billing charge') — never a generic bucket like 'customer issues' or 'bad experience'",
+        min_length=1, max_length=80,
+        description="A specific sub-topic within category — prefer one of CATEGORY_THEMES[category], "
+        "but a new concise theme name is fine when nothing there fits",
     )
     urgency_score: float = Field(ge=0, le=1, description="0 (no urgency) to 1 (needs immediate attention)")
     is_actionable_ticket: bool = Field(
@@ -97,7 +162,7 @@ class FeedbackAnalysis(BaseModel):
 
 
 class RecommendedActionItem(BaseModel):
-    theme: str
+    category: str
     action_text: str = Field(min_length=1, max_length=300, description="One concrete, specific action a product/CX team could take")
     rationale: str = Field(min_length=1, max_length=300, description="Why this action, citing the specific trend/urgency/sentiment numbers given")
 
@@ -111,14 +176,15 @@ class ActionStatusUpdateRequest(BaseModel):
 
 
 class NarrativeReport(BaseModel):
-    """The plain-language periodic report — meant to be readable by anyone,
-    not just the PM who generated it (a VP of CX, an exec skimming a
-    deck)."""
+    """The plain-language periodic report — meant to be read by a
+    non-technical manager, not an analyst: a short, scannable list of bullet
+    points per field rather than paragraphs, still deliberately not a
+    data-report shape (no headline/stat-citations)."""
 
-    headline: str = Field(min_length=1, max_length=140, description="One sentence: the single most important thing that happened this period")
-    key_findings: list[str] = Field(min_length=1, max_length=6, description="3-6 short, specific findings — not generic filler")
-    narrative: str = Field(min_length=1, max_length=1200, description="A short plain-language paragraph explaining what happened and why it matters")
-    bottom_line: str = Field(min_length=1, max_length=300, description="The single most actionable takeaway — what to do first")
+    narrative: list[str] = Field(min_length=1, max_length=5, description="2-4 short bullet points telling the story of this period, like briefing someone non-technical out loud")
+    whats_going_well: list[str] = Field(min_length=1, max_length=4, description="1-3 short bullet points on what's working, in plain language")
+    top_pain_point: list[str] = Field(min_length=1, max_length=4, description="1-3 short bullet points naming the biggest complaint(s)/concern(s), in plain language")
+    recommendation: list[str] = Field(min_length=1, max_length=4, description="1-3 short bullet points on what to do about it, in plain language")
 
 
 class ResolutionSuggestion(BaseModel):
@@ -201,7 +267,7 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    role: str  # "user" | "team" | "admin" | "pm"
+    role: str  # "user" | "team" | "admin" | "pm" | "dev"
     name: str
     team: Optional[Team] = None
 
@@ -305,3 +371,30 @@ class FeedbackRequest(BaseModel):
 
 class DemoRunRequest(BaseModel):
     tickets: list[str] = Field(min_length=1, max_length=100)
+
+
+# ---- PM-authored custom surveys ------------------------------------------
+
+# Every custom survey uses this exact 5-point scale — deliberately not a
+# PM choice: 1/2 are the negative zone ("Worst"/"Bad" — distinct severities
+# of dissatisfaction), 3 is the true neutral midpoint, 4/5 are the positive
+# zone. See main.py's _survey_response_type for the matching classification.
+SURVEY_SCALE_POINTS = 5
+SURVEY_SCALE_LABELS: list[str] = ["Worst", "Bad", "Okay", "Good", "Best"]
+
+
+class CustomSurveyCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    questions: list[str] = Field(min_length=1, max_length=10)
+
+    @field_validator("questions")
+    @classmethod
+    def _no_blank_questions(cls, v: list[str]) -> list[str]:
+        cleaned = [q.strip() for q in v if q.strip()]
+        if not cleaned:
+            raise ValueError("at least one non-blank question is required")
+        return cleaned
+
+
+class SurveyAnswerRequest(BaseModel):
+    answers: list[int] = Field(min_length=1, max_length=10)

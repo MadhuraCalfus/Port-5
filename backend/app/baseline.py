@@ -15,31 +15,35 @@ import re
 from .models import Category, Priority, Team, Tone
 
 CATEGORY_TEAM_MAP: dict[Category, Team] = {
-    Category.BILLING: Team.BILLING_SUPPORT,
-    Category.TECHNICAL_ISSUE: Team.TECHNICAL_SUPPORT,
-    Category.ACCOUNT_ACCESS: Team.ACCOUNT_MANAGEMENT,
-    Category.BUG_REPORT: Team.ENGINEERING,
-    Category.FEATURE_REQUEST: Team.PRODUCT_TEAM,
-    Category.COMPLAINT: Team.CUSTOMER_SUCCESS,
-    Category.SECURITY_CONCERN: Team.SECURITY_TEAM,
-    Category.GENERAL_INQUIRY: Team.CUSTOMER_SUCCESS,
+    Category.ORDER_ISSUE: Team.ORDER_DELIVERY_TEAM,
+    Category.PAYMENTS_REFUNDS: Team.PAYMENTS_BILLING_TEAM,
+    Category.RETURNS_REPLACEMENTS: Team.RETURNS_REFUNDS_TEAM,
+    Category.PRODUCT_QUALITY_SAFETY: Team.PRODUCT_QUALITY_TEAM,
+    Category.APP_WEBSITE_ISSUE: Team.TECHNICAL_SUPPORT_TEAM,
+    Category.ACCOUNT_ACCESS: Team.ACCOUNT_LOYALTY_TEAM,
+    Category.SELLER_VENDOR_ISSUE: Team.TRIAGE,
+    Category.GENERAL_INQUIRY: Team.TRIAGE,
 }
 
 _KEYWORDS: dict[Category, list[str]] = {
-    Category.BILLING: ["charge", "charged", "invoice", "billing", "refund", "subscription",
-                        "payment", "credit card", "price", "plan", "renew", "billed twice"],
-    Category.SECURITY_CONCERN: ["hacked", "breach", "phishing", "suspicious login", "unauthorized",
-                                 "leaked", "security", "2fa", "two-factor", "password reset link i didn't request"],
+    Category.ORDER_ISSUE: ["hasn't arrived", "has not arrived", "never received", "not delivered",
+                            "delivery delay", "delayed", "wrong item", "wrong product shipped",
+                            "package lost", "lost my package", "cancel my order", "non-delivery"],
+    Category.PAYMENTS_REFUNDS: ["charged twice", "charged", "double charged", "refund", "invoice",
+                                 "billing", "payment failed", "coupon", "discount code", "wallet",
+                                 "cashback", "price"],
+    Category.RETURNS_REPLACEMENTS: ["return", "replace", "replacement", "exchange", "wrong shade",
+                                     "wrong size", "want to return", "return window", "swap it"],
+    Category.PRODUCT_QUALITY_SAFETY: ["damaged", "expired", "leaking", "leaked", "broken seal",
+                                       "tampered", "counterfeit", "fake product", "allergic",
+                                       "allergy", "reaction", "smells off", "spoiled"],
+    Category.APP_WEBSITE_ISSUE: ["app crashed", "app keeps crashing", "website down", "site is down",
+                                  "checkout failed", "won't load", "not loading", "glitch",
+                                  "freezes", "freeze", "500 error", "error message"],
     Category.ACCOUNT_ACCESS: ["can't log in", "cannot log in", "locked out", "forgot password",
-                               "reset my password", "login", "log in", "sign in", "account access", "mfa"],
-    Category.BUG_REPORT: ["bug", "crash", "crashes", "crashing", "error", "broken", "not working",
-                           "doesn't work", "glitch", "freeze", "freezes", "500 error", "stack trace"],
-    Category.TECHNICAL_ISSUE: ["slow", "down", "outage", "won't load", "not loading", "timeout",
-                                "connection", "sync", "integration", "api"],
-    Category.FEATURE_REQUEST: ["feature request", "would be nice", "please add", "suggestion",
-                                "it would be great if", "can you add", "wish list"],
-    Category.COMPLAINT: ["disappointed", "unacceptable", "terrible", "worst", "frustrated",
-                          "angry", "ridiculous", "unhappy", "complain"],
+                               "reset my password", "login", "log in", "sign in", "account access", "otp", "mfa"],
+    Category.SELLER_VENDOR_ISSUE: ["seller", "vendor", "third-party seller", "marketplace seller",
+                                    "seller not responding", "seller hasn't responded"],
 }
 
 _URGENT_WORDS = ["urgent", "asap", "immediately", "emergency", "right now", "critical"]
@@ -78,11 +82,11 @@ def _guess_tone(text: str, raw: str) -> Tone:
 
 
 def _guess_priority(text: str, tone: Tone, category: Category) -> Priority:
-    if category == Category.SECURITY_CONCERN:
+    if category == Category.PRODUCT_QUALITY_SAFETY:
         return Priority.HIGH
     if any(w in text for w in _URGENT_WORDS) or tone == Tone.ANGRY:
         return Priority.HIGH
-    if category in (Category.BUG_REPORT, Category.BILLING, Category.ACCOUNT_ACCESS) or tone == Tone.FRUSTRATED:
+    if category in (Category.ORDER_ISSUE, Category.PAYMENTS_REFUNDS, Category.ACCOUNT_ACCESS) or tone == Tone.FRUSTRATED:
         return Priority.MEDIUM
     return Priority.LOW
 

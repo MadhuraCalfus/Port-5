@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import clsx from "clsx";
 import { LineChart, LogIn, Moon, Shield, Sun, User, Users } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../hooks/useTheme";
 import { AuthFloatingIcons } from "../components/AuthFloatingIcons";
 import { Button, Card } from "../components/primitives";
+import { NykaaAppFeedbackWidget } from "./user/nykaa/NykaaAppFeedbackWidget";
 
 const ROLE_TABS = [
   { id: "user", label: "Customer", icon: User, hint: "Submit tickets and track their status." },
@@ -18,7 +19,13 @@ export function LoginPage() {
   const { login, logout } = useAuth();
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
-  const [roleTab, setRoleTab] = useState("user");
+  const [searchParams] = useSearchParams();
+  // A ?role= query param (set by WelcomePage's cards) locks this screen to
+  // that one role's login form — no switcher shown, so clicking "Customer"
+  // on Welcome can never land you on Team/Admin/PM/Dev. Direct/bookmarked
+  // /login visits (no ?role=) fall back to the full switcher below.
+  const lockedRole = ROLE_TABS.find((r) => r.id === searchParams.get("role"));
+  const [roleTab, setRoleTab] = useState(() => lockedRole?.id ?? "user");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
@@ -52,8 +59,8 @@ export function LoginPage() {
       <Card className="relative z-10 w-full max-w-sm p-6">
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white">🎟️</span>
-            <h1 className="font-display text-lg font-semibold text-ink dark:text-ink-dark">TicketTrident</h1>
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white">💄</span>
+            <h1 className="font-display text-lg font-semibold text-ink dark:text-ink-dark">NykaaPulse</h1>
           </div>
           <button
             onClick={toggle}
@@ -64,29 +71,33 @@ export function LoginPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-4 gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] p-1">
-          {ROLE_TABS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => {
-                setRoleTab(id);
-                setError(null);
-              }}
-              className={clsx(
-                "flex flex-col items-center gap-1 rounded-lg py-2 text-xs font-medium transition",
-                roleTab === id
-                  ? "bg-surface dark:bg-surface-dark text-brand dark:text-brand-dim shadow-sm"
-                  : "text-ink/50 dark:text-ink-dark/50 hover:text-ink dark:hover:text-ink-dark",
-              )}
-            >
-              <Icon size={16} />
-              {label}
-            </button>
-          ))}
-        </div>
+        {!lockedRole && (
+          <div className="grid grid-cols-4 gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] p-1">
+            {ROLE_TABS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setRoleTab(id);
+                  setError(null);
+                }}
+                className={clsx(
+                  "flex flex-col items-center gap-1 rounded-lg py-2 text-xs font-medium transition",
+                  roleTab === id
+                    ? "bg-surface dark:bg-surface-dark text-brand dark:text-brand-dim shadow-sm"
+                    : "text-ink/50 dark:text-ink-dark/50 hover:text-ink dark:hover:text-ink-dark",
+                )}
+              >
+                <Icon size={16} />
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
-        <h2 className="mt-4 text-base font-semibold text-ink dark:text-ink-dark">{active.label} login</h2>
+        <h2 className={clsx("text-base font-semibold text-ink dark:text-ink-dark", lockedRole ? "mt-0" : "mt-4")}>
+          {active.label} login
+        </h2>
         <p className="mt-1 text-sm text-ink/60 dark:text-ink-dark/60">{active.hint}</p>
 
         <form onSubmit={submit} className="mt-4 space-y-3">
@@ -126,7 +137,18 @@ export function LoginPage() {
             </Link>
           </p>
         )}
+
+        {lockedRole && (
+          <p className="mt-4 text-center text-xs text-ink/40 dark:text-ink-dark/40">
+            Not {active.label.toLowerCase()}?{" "}
+            <Link to="/welcome" className="font-medium text-brand dark:text-brand-dim hover:underline">
+              Choose a different role
+            </Link>
+          </p>
+        )}
       </Card>
+
+      <NykaaAppFeedbackWidget />
     </div>
   );
 }

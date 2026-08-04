@@ -5,8 +5,8 @@ There's no separate admin table (see the plan) — a single admin account is
 configured via ADMIN_EMAIL/ADMIN_PASSWORD in .env and checked directly,
 since it's not multi-account like users/team_members and never touches the
 database (so a DB leak can't expose it). PM is the same shape as admin — a
-single fixed account via PM_EMAIL/PM_PASSWORD — and deliberately not a
-role Admin can create or manage; the two are peers, not admin-of-PM.
+single fixed account via PM_EMAIL/PM_PASSWORD — and deliberately not a role
+Admin can create or manage; all three are peers.
 """
 import os
 import secrets
@@ -20,10 +20,10 @@ JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-change-me-in-production")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRES_SECONDS = 60 * 60 * 24 * 7  # 7 days
 
-ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@tickettrident.local")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@nykaapulse.local")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin")
 
-PM_EMAIL = os.environ.get("PM_EMAIL", "pm@tickettrident.local")
+PM_EMAIL = os.environ.get("PM_EMAIL", "pm@nykaapulse.local")
 PM_PASSWORD = os.environ.get("PM_PASSWORD", "pm")
 
 
@@ -74,6 +74,19 @@ def require_user(request: Request) -> dict:
     if claims["role"] != "user":
         raise HTTPException(status_code=403, detail="a user account is required for this action")
     return claims
+
+
+def require_user_optional(request: Request) -> dict | None:
+    """Same as require_user, but returns None instead of raising when there's
+    no bearer token at all — for the handful of endpoints a logged-out
+    visitor can also use (e.g. app feedback submitted from the login page),
+    which still attribute the submission to a real account whenever one is
+    logged in. A present-but-invalid/wrong-role token still raises, same as
+    require_user — this only relaxes the "no token at all" case."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    return require_user(request)
 
 
 def require_team(request: Request) -> dict:

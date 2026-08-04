@@ -191,6 +191,34 @@ export function Modal({ title, onClose, children }) {
   );
 }
 
+// Right-anchored panel — the "Bag" slide-over pattern real e-commerce sites
+// use for cart/account/orders, vs. Modal's centered dialog for one-off forms.
+export function SlideOver({ title, onClose, children, widthClassName = "max-w-md" }) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
+      <div
+        className={clsx(
+          "slide-in-right thin-scroll h-full w-full overflow-y-auto border-l border-black/8 dark:border-white/10 bg-surface dark:bg-surface-dark p-5 shadow-xl",
+          widthClassName,
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="font-display text-base font-semibold text-ink dark:text-ink-dark">{title}</h3>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="grid h-8 w-8 place-items-center rounded-lg text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function Button({ children, className, variant = "primary", ...rest }) {
   const base = "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed";
   const variants = {

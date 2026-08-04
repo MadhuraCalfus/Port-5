@@ -1,4 +1,5 @@
 import os
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -11,9 +12,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import actions_ai, analytics, auth, classifier, email_service, feedback_ai, insights, narrative_ai, store, ticket_report
+from . import nykaa_seed, nykaa_store
+from .nykaa_routes import nykaa_router
 from .models import (
     ActionStatusUpdateRequest,
     AdminAssignRequest,
+    CustomSurveyCreateRequest,
     DemoRunRequest,
     FeedbackImportRequest,
     FeedbackRequest,
@@ -24,7 +28,10 @@ from .models import (
     RouteRequest,
     SelfResolvedRequest,
     SignupRequest,
+    SurveyAnswerRequest,
     SurveyRequest,
+    SURVEY_SCALE_LABELS,
+    SURVEY_SCALE_POINTS,
     TeamMemberCreateRequest,
     TicketCommentRequest,
     TicketStatusUpdateRequest,
@@ -44,7 +51,7 @@ ALLOWED_ATTACHMENT_TYPES = {
 }
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024  # 5MB
 
-app = FastAPI(title="TicketTrident", version="1.0.0")
+app = FastAPI(title="NykaaPulse", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -68,6 +75,11 @@ async def _no_cache(request, call_next):
 @app.on_event("startup")
 def _startup():
     store.init_db()
+    nykaa_store.init_nykaa_db()
+    nykaa_seed.seed_catalog()
+
+
+app.include_router(nykaa_router)
 
 
 @app.get("/api/health")
@@ -128,7 +140,7 @@ def forgot_password(req: ForgotPasswordRequest):
         reset_link = f"{FRONTEND_URL}/reset-password?token={token}"
         email_service.send_email(
             member["email"],
-            "Reset your TicketTrident password",
+            "Reset your NykaaPulse password",
             f"Hi {member['name']},\n\nClick the link below to set a new password. "
             f"This link expires in {RESET_TOKEN_MINUTES} minutes.\n\n{reset_link}\n\n"
             "If you didn't request this, you can ignore this email.",
@@ -206,21 +218,34 @@ def mark_self_resolved(req: SelfResolvedRequest, claims: dict = Depends(auth.req
     return store.save_self_resolved(int(claims["sub"]), req.message, req.summary, req.steps)
 
 
-def _analyze_and_log_feedback(source_type: str, text: str, source_ref: int | None = None) -> None:
+def _analyze_and_log_feedback(
+    source_type: str, text: str, source_ref: int | None = None, user_id: int | None = None, rating: int | None = None
+) -> None:
     """Run the PM insights pipeline on one piece of customer voice and log
     it to feedback_items — shared by every ingestion path (ticket creation,
-    survey submission, and later review import) so they all feed the same
-    unified table the same way."""
+    survey submission, and review import) so they all feed the same unified
+    table the same way. user_id is set for tickets/surveys (a real account
+    is always behind them) and left unset for imported reviews, which have
+    no account behind them at all. rating is only ever set for surveys —
+    tickets/reviews have no star rating to attach."""
     outcome = feedback_ai.analyze_feedback(text)
     a = outcome.analysis
+    # A 1-2 star rating is an unambiguous, deterministic urgency signal —
+    # applied as a floor rather than left to the AI's judgment, since it's a
+    # plain fact (not something needing interpretation) and this session
+    # already found LLM prompt-nudges unreliable for a similarly narrow rule.
+    urgency_score = max(a.urgency_score, 0.5) if rating is not None and rating <= 2 else a.urgency_score
     store.save_feedback_item(
         source_type=source_type,
         source_ref=source_ref,
+        user_id=user_id,
+        rating=rating,
         text=text,
         sentiment_label=a.sentiment_label.value,
         sentiment_score=a.sentiment_score,
+        category=a.category.value,
         theme=a.theme,
-        urgency_score=a.urgency_score,
+        urgency_score=urgency_score,
         is_actionable_ticket=a.is_actionable_ticket,
         model_used=outcome.model_used,
         mode=outcome.mode,
@@ -233,10 +258,10 @@ def create_ticket(req: NewTicketRequest, claims: dict = Depends(auth.require_use
     """A user submits a ticket. No routing AI call here — it stays
     unclassified (status="New") until an Admin routes it. It does, however,
     get mirrored into feedback_items right away: the PM insights pipeline
-    (sentiment/theme/urgency) runs independently of routing, on its own
+    (sentiment/category/theme/urgency) runs independently of routing, on its own
     timeline, without waiting on an Admin to ever pick this ticket up."""
     ticket = store.create_ticket(user_id=int(claims["sub"]), message=req.message)
-    _analyze_and_log_feedback("ticket", req.message, source_ref=ticket["id"])
+    _analyze_and_log_feedback("ticket", req.message, source_ref=ticket["id"], user_id=int(claims["sub"]))
     return ticket
 
 
@@ -245,9 +270,13 @@ def submit_survey(req: SurveyRequest, claims: dict = Depends(auth.require_user))
     """A quick CSAT-style survey response — entirely separate from the
     ticket lifecycle (no team, no status, nothing to route). Always logged
     to feedback_items for the PM dashboard; there is no other consumer of
-    this data, so there's nothing to return beyond an acknowledgement."""
-    text = f"Survey rating: {req.rating}/5." + (f" Comment: {req.comment}" if req.comment else " No comment provided.")
-    _analyze_and_log_feedback("survey", text)
+    this data, so there's nothing to return beyond an acknowledgement.
+
+    Analyzes and stores just the customer's own comment — `rating` already
+    has its own column, so it doesn't need to be embedded in the text a PM
+    reads in All Feedback or the text the AI classifier itself analyzes."""
+    text = req.comment.strip() if req.comment and req.comment.strip() else "(No comment provided — survey rating only)"
+    _analyze_and_log_feedback("survey", text, user_id=int(claims["sub"]), rating=req.rating)
     return {"message": "thank you for your feedback"}
 
 
@@ -361,7 +390,7 @@ def admin_create_team_member(req: TeamMemberCreateRequest, claims: dict = Depend
     member = store.create_team_member(req.name, req.email, auth.hash_password(req.password), req.team.value)
     emailed = email_service.send_email(
         req.email,
-        "Your TicketTrident team account",
+        "Your NykaaPulse team account",
         f"Hi {req.name},\n\nAn account was created for you on the {req.team.value} team.\n\n"
         f"Email: {req.email}\nPassword: {req.password}\n\n"
         f"Log in at {FRONTEND_URL}/login and change your password any time via \"Forgot password?\".",
@@ -535,12 +564,12 @@ def repair_example(claims: dict = Depends(auth.require_admin)):
     any live model call — good for the 'what happens with malformed JSON'
     part of the demo."""
     broken_examples = [
-        '```json\n{"category": "Billing", "priority": "High", "team": "Billing Support", '
+        '```json\n{"category": "Payments & Refunds", "priority": "High", "team": "Payments & Billing Team", '
         '"tone": "angry", "confidence": 0.8, "is_ambiguous": false, "reasoning": "Double charge complaint.",}\n```',
-        'Sure! Here is the classification: {"category": "Bug Report", "priority": "Medium", '
-        '"team": "Engineering", "tone": "frustrated", "confidence": 0.7, "is_ambiguous": false, '
-        '"reasoning": "App crash reported."} Let me know if you need anything else.',
-        '{"category": "Security Concern" "priority": "High" "team": "Security Team"}',
+        'Sure! Here is the classification: {"category": "App/Website Issue", "priority": "Medium", '
+        '"team": "Technical Support Team", "tone": "frustrated", "confidence": 0.7, "is_ambiguous": false, '
+        '"reasoning": "Checkout page crash reported."} Let me know if you need anything else.',
+        '{"category": "Product Quality & Safety" "priority": "High" "team": "Product Quality Team"}',
     ]
     return {"examples": [classifier.repair_demo(e) for e in broken_examples]}
 
@@ -570,10 +599,10 @@ def pm_list_feedback(limit: int = 200, claims: dict = Depends(auth.require_pm)):
 
 @app.get("/api/pm/insights")
 def pm_insights(period_type: str = "weekly", period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
-    """Theme frequency, sentiment distribution, and urgency ranking for one
-    period (defaults to the current one). Pass period_key (e.g. "2026-W29")
-    to look at a past period — compute_period_insights lists every period
-    that actually has data in its own response."""
+    """Category frequency, sentiment distribution, and urgency ranking for
+    one period (defaults to the current one). Pass period_key (e.g.
+    "2026-W29") to look at a past period — compute_period_insights lists
+    every period that actually has data in its own response."""
     if period_type not in insights.PERIOD_TYPES:
         raise HTTPException(status_code=400, detail=f"period_type must be one of {insights.PERIOD_TYPES}")
     return insights.compute_period_insights(period_type, period_key)
@@ -581,20 +610,60 @@ def pm_insights(period_type: str = "weekly", period_key: str | None = None, clai
 
 @app.get("/api/pm/insights/trend")
 def pm_insights_trend(period_type: str = "weekly", period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
-    """Period-over-period % change per theme, plus the raw current/previous
-    aggregates it was computed from."""
+    """Period-over-period % change per category, plus the raw current/
+    previous aggregates it was computed from."""
     if period_type not in insights.PERIOD_TYPES:
         raise HTTPException(status_code=400, detail=f"period_type must be one of {insights.PERIOD_TYPES}")
     return insights.compute_trend(period_type, period_key)
 
 
+@app.get("/api/pm/insights/sentiment-series")
+def pm_sentiment_series(
+    period_type: str = "weekly", num_periods: int = 8, end_period_key: str | None = None, claims: dict = Depends(auth.require_pm)
+):
+    """The num_periods periods ending at end_period_key (defaults to the
+    current period), oldest first — powers the "over time" trend charts."""
+    if period_type not in insights.PERIOD_TYPES:
+        raise HTTPException(status_code=400, detail=f"period_type must be one of {insights.PERIOD_TYPES}")
+    return {"series": insights.compute_sentiment_series(period_type, num_periods, end_period_key)}
+
+
+@app.get("/api/pm/insights/items")
+def pm_period_items(period_type: str = "weekly", period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
+    """Every raw feedback_items row in one period — the full underlying data
+    behind a period's numbers, used by the PM's PDF/CSV export."""
+    if period_type not in insights.PERIOD_TYPES:
+        raise HTTPException(status_code=400, detail=f"period_type must be one of {insights.PERIOD_TYPES}")
+    return {"items": insights.get_period_items(period_type, period_key)}
+
+
+def _validate_date_range(start: str, end: str) -> None:
+    try:
+        datetime.strptime(start, "%Y-%m-%d")
+        datetime.strptime(end, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="start/end must be YYYY-MM-DD")
+    if start > end:
+        raise HTTPException(status_code=400, detail="start must be on or before end")
+
+
+@app.get("/api/pm/insights/range")
+def pm_insights_range(start: str, end: str, claims: dict = Depends(auth.require_pm)):
+    """Aggregate stats for an arbitrary custom date range — Analytics'
+    calendar-range picker, parallel to pm_insights' fixed period buckets
+    but with no "previous range" trend/delta concept (there's no natural
+    "previous" for an arbitrary window)."""
+    _validate_date_range(start, end)
+    return insights.compute_range_insights(start, end)
+
+
 @app.post("/api/pm/insights/actions/generate")
 def pm_generate_actions(period_type: str = "weekly", period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
-    """Recommend actions for whatever themes are worsening or already urgent
-    this period, and persist them. Safe to call repeatedly — it always
-    appends fresh recommendations rather than overwriting, so re-running
-    this after new feedback comes in doesn't erase what a PM already marked
-    done on earlier recommendations for the same period."""
+    """Recommend actions for whatever categories are worsening or already
+    urgent this period, and persist them. Safe to call repeatedly — it
+    always appends fresh recommendations rather than overwriting, so
+    re-running this after new feedback comes in doesn't erase what a PM
+    already marked done on earlier recommendations for the same period."""
     if period_type not in insights.PERIOD_TYPES:
         raise HTTPException(status_code=400, detail=f"period_type must be one of {insights.PERIOD_TYPES}")
     trend = insights.compute_trend(period_type, period_key)
@@ -603,7 +672,7 @@ def pm_generate_actions(period_type: str = "weekly", period_key: str | None = No
         store.save_recommended_action(
             period_type=trend["period_type"],
             period_key=trend["current_period_key"],
-            theme=a["theme"],
+            category=a["category"],
             action_text=a["action_text"],
             rationale=a["rationale"],
         )
@@ -644,7 +713,7 @@ def pm_generate_report(period_type: str = "weekly", period_key: str | None = Non
         period_key=trend["current_period_key"],
         period_start=trend["current_period_start"],
         period_end=trend["current_period_end"],
-        theme_trend=trend["theme_deltas"],
+        category_trend=trend["category_deltas"],
         sentiment_trend={
             "avg_sentiment_score": trend["current"]["avg_sentiment_score"],
             "avg_sentiment_score_delta": trend["avg_sentiment_score_delta"],
@@ -660,15 +729,191 @@ def pm_generate_report(period_type: str = "weekly", period_key: str | None = Non
     return saved
 
 
+
+# The fields today's NarrativeReport model requires — a report generated
+# under an earlier version of that schema (e.g. the old headline/
+# key_findings/bottom_line shape) is missing these entirely, and would
+# render as blank "What went well"/"Top pain point"/"Recommendation" cards
+# on the frontend rather than raising an error, since JS just reads
+# undefined for a missing key.
+_CURRENT_NARRATIVE_FIELDS = {"narrative", "whats_going_well", "top_pain_point", "recommendation"}
+
+
 @app.get("/api/pm/insights/report")
 def pm_get_report(period_type: str = "weekly", period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
     if period_type not in insights.PERIOD_TYPES:
         raise HTTPException(status_code=400, detail=f"period_type must be one of {insights.PERIOD_TYPES}")
     key = period_key or insights.current_period_key(period_type)
     report = store.get_periodic_insight(period_type, key)
-    if not report:
+    # A report from a since-changed schema is treated as if nothing were
+    # generated yet, so the frontend's existing "no report? generate one"
+    # flow transparently refreshes it in the current format — no separate
+    # migration step, no manual "Regenerate" click needed.
+    if not report or not _CURRENT_NARRATIVE_FIELDS.issubset(report["narrative"].keys()):
         raise HTTPException(status_code=404, detail="no report generated for this period yet")
     return report
+
+
+# ---- pm: custom surveys (ad-hoc question sets, distinct from the fixed
+# star-rating survey above) -------------------------------------------------
+
+def _survey_response_type(value: int) -> str:
+    """The fixed classification for the 5-point scale every survey uses:
+    1-2 (Worst/Bad) is the negative zone, 3 (Okay) is the exact neutral
+    midpoint, 4-5 (Good/Best) is the positive zone."""
+    if value <= 2:
+        return "negative"
+    if value == 3:
+        return "neutral"
+    return "positive"
+
+
+def _survey_summary_line(distribution: dict) -> str:
+    """A 1-2 sentence, plain-language read on a positive/neutral/negative
+    split — deliberately qualitative, not a numbers/percentages recap (the
+    distribution itself already shows the numbers). Pure arithmetic, no LLM
+    call, same proportion as insights.py's other deterministic dials."""
+    pos, neu, neg = distribution.get("positive", 0), distribution.get("neutral", 0), distribution.get("negative", 0)
+    total = pos + neu + neg
+    if total == 0:
+        return "No responses yet — check back once customers have answered."
+    pos_ratio, neg_ratio = pos / total, neg / total
+    if pos_ratio >= 0.6:
+        return "Customers are largely happy here — responses lean strongly positive."
+    if neg_ratio >= 0.6:
+        return "Customers are largely unhappy here — this likely needs attention."
+    if pos_ratio > neg_ratio:
+        return "Feedback leans positive overall, though a fair number of customers aren't fully satisfied."
+    if neg_ratio > pos_ratio:
+        return "Feedback leans negative overall, with real room to improve."
+    return "Feedback is evenly mixed — customers are split between happy and unhappy."
+
+
+@app.post("/api/pm/surveys")
+def pm_create_survey(req: CustomSurveyCreateRequest, claims: dict = Depends(auth.require_pm)):
+    return store.create_custom_survey(req.title, SURVEY_SCALE_POINTS, req.questions, claims.get("name"))
+
+
+@app.get("/api/pm/surveys")
+def pm_list_surveys(claims: dict = Depends(auth.require_pm)):
+    return {"surveys": store.list_custom_surveys(), "scale_labels": SURVEY_SCALE_LABELS}
+
+
+@app.get("/api/pm/surveys/overview")
+def pm_surveys_overview(claims: dict = Depends(auth.require_pm)):
+    """Rolled up across every SENT survey — how many distinct customers
+    have responded at all, response volume per survey, and one pooled
+    positive/neutral/negative read, for the "All Surveys" view on Survey
+    Analytics rather than one survey at a time."""
+    surveys = [s for s in store.list_custom_surveys() if s["status"] == "sent"]
+    per_survey = []
+    type_counts = Counter()
+    scale_counts = Counter()
+    all_values = []
+    respondents: set[int] = set()
+    total_responses = 0
+    for s in surveys:
+        responses = store.list_survey_responses(s["id"])
+        total_responses += len(responses)
+        for r in responses:
+            respondents.add(r["user_id"])
+            for v in r["answers"]:
+                type_counts[_survey_response_type(v)] += 1
+                scale_counts[v] += 1
+                all_values.append(v)
+        per_survey.append({
+            "id": s["id"], "title": s["title"], "response_count": len(responses), "scale_points": s["scale_points"],
+        })
+
+    response_distribution = {
+        "positive": type_counts.get("positive", 0),
+        "neutral": type_counts.get("neutral", 0),
+        "negative": type_counts.get("negative", 0),
+    }
+    return {
+        "total_surveys": len(surveys),
+        "total_responses": total_responses,
+        "total_respondents": len(respondents),
+        "avg_score": round(sum(all_values) / len(all_values), 2) if all_values else None,
+        "scale_labels": SURVEY_SCALE_LABELS,
+        "scale_distribution": {v: scale_counts.get(v, 0) for v in range(1, SURVEY_SCALE_POINTS + 1)},
+        "per_survey": per_survey,
+        "response_distribution": response_distribution,
+        "summary": _survey_summary_line(response_distribution),
+    }
+
+
+@app.post("/api/pm/surveys/{survey_id}/send")
+def pm_send_survey(survey_id: int, claims: dict = Depends(auth.require_pm)):
+    """Once sent, the survey shows up in every customer's pending-surveys
+    list (list_pending_surveys_for_user) immediately — there's no separate
+    targeting step, per the mission's own spec of sending to all users."""
+    survey = store.get_custom_survey(survey_id)
+    if not survey:
+        raise HTTPException(status_code=404, detail="survey not found")
+    return store.mark_survey_sent(survey_id)
+
+
+@app.get("/api/pm/surveys/{survey_id}/results")
+def pm_survey_results(survey_id: int, claims: dict = Depends(auth.require_pm)):
+    """Per-question answer-count distribution across the scale plus an
+    average — pure arithmetic over already-collected responses, same spirit
+    as insights.py's aggregation (no LLM involved)."""
+    survey = store.get_custom_survey(survey_id)
+    if not survey:
+        raise HTTPException(status_code=404, detail="survey not found")
+    responses = store.list_survey_responses(survey_id)
+
+    questions = []
+    all_values = []
+    for i, question_text in enumerate(survey["questions"]):
+        values = [r["answers"][i] for r in responses if i < len(r["answers"])]
+        all_values.extend(values)
+        distribution = {v: values.count(v) for v in range(1, SURVEY_SCALE_POINTS + 1)}
+        questions.append({
+            "question": question_text,
+            "distribution": distribution,
+            "avg": round(sum(values) / len(values), 2) if values else None,
+        })
+
+    type_counts = Counter(_survey_response_type(v) for v in all_values)
+    response_distribution = {
+        "positive": type_counts.get("positive", 0),
+        "neutral": type_counts.get("neutral", 0),
+        "negative": type_counts.get("negative", 0),
+    }
+
+    return {
+        "survey": survey,
+        "response_count": len(responses),
+        "scale_labels": SURVEY_SCALE_LABELS,
+        "questions": questions,
+        "response_distribution": response_distribution,
+        "avg_score": round(sum(all_values) / len(all_values), 2) if all_values else None,
+        "summary": _survey_summary_line(response_distribution),
+    }
+
+
+# ---- customer: answering custom surveys -----------------------------------
+
+@app.get("/api/surveys/pending")
+def list_pending_surveys(claims: dict = Depends(auth.require_user)):
+    return {"surveys": store.list_pending_surveys_for_user(int(claims["sub"]))}
+
+
+@app.post("/api/surveys/{survey_id}/answer")
+def answer_survey(survey_id: int, req: SurveyAnswerRequest, claims: dict = Depends(auth.require_user)):
+    survey = store.get_custom_survey(survey_id)
+    if not survey or survey["status"] != "sent":
+        raise HTTPException(status_code=404, detail="survey not found or not open")
+    if len(req.answers) != len(survey["questions"]):
+        raise HTTPException(
+            status_code=400, detail=f"expected {len(survey['questions'])} answers, got {len(req.answers)}"
+        )
+    if any(a < 1 or a > SURVEY_SCALE_POINTS for a in req.answers):
+        raise HTTPException(status_code=400, detail=f"each answer must be between 1 and {SURVEY_SCALE_POINTS}")
+    response = store.save_survey_response(survey_id, int(claims["sub"]), req.answers)
+    return response or {"message": "already answered"}
 
 
 _frontend_dist = Path(__file__).parent.parent.parent / "frontend" / "dist"

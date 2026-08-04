@@ -6,19 +6,19 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Fraunces", ui-serif, Georgia, serif;
 
-  /* Neutral grayscale base + a muted steel-blue accent — present, but not
-     the loud original indigo. Priority colors (high/medium/low) are kept
-     as red/amber/green on purpose — that's a severity convention
-     non-technical users already recognize, not a brand-color choice. */
-  --color-canvas: #eeece8;
-  --color-canvas-dark: #121212;
-  --color-surface: #f7f6f3;
-  --color-surface-dark: #1c1c1e;
+  /* NykaaPulse brand theme — baby pink + white, applied app-wide. Priority
+     colors (high/medium/low) are kept as red/amber/green on purpose —
+     that's a severity convention non-technical users already recognize,
+     not a brand-color choice. */
+  --color-canvas: #fdedf3;
+  --color-canvas-dark: #1c1115;
+  --color-surface: #ffffff;
+  --color-surface-dark: #26151c;
   --color-ink: #1a1a1a;
   --color-ink-dark: #f2f2f2;
 
-  --color-brand: #3d6b96;
-  --color-brand-dim: #7fa8c9;
+  --color-brand: #d6588c;
+  --color-brand-dim: #f2a6c6;
   --color-high: #c0392b;
   --color-medium: #b8860b;
   --color-low: #2f8f5b;
@@ -54,21 +54,21 @@ body {
   font-family: var(--font-display);
 }
 
-/* subtle grain/gradient backdrop, theme aware — a quiet hint of the brand blue */
+/* subtle grain/gradient backdrop, theme aware — a quiet hint of the brand pink */
 .app-backdrop {
-  background-image: radial-gradient(circle at 15% 0%, rgba(61, 107, 150, 0.08), transparent 45%),
-    radial-gradient(circle at 85% 10%, rgba(61, 107, 150, 0.06), transparent 45%);
+  background-image: radial-gradient(circle at 15% 0%, rgba(214, 88, 140, 0.10), transparent 45%),
+    radial-gradient(circle at 85% 10%, rgba(214, 88, 140, 0.07), transparent 45%);
 }
 
-/* Login/signup only — a richer wash of the brand blue plus a soft dot
+/* Login/signup only — a richer wash of the brand pink plus a soft dot
    texture, so the auth screens feel a little more considered than a plain
    card on a flat page, without adding any extra layout/panel. */
 .auth-backdrop {
   background-color: var(--color-canvas);
   background-image:
-    radial-gradient(circle at 12% 8%, rgba(20, 40, 64, 0.38), transparent 48%),
-    radial-gradient(circle at 88% 4%, rgba(29, 53, 87, 0.26), transparent 46%),
-    radial-gradient(circle at 50% 105%, rgba(16, 46, 34, 0.20), transparent 55%);
+    radial-gradient(circle at 12% 8%, rgba(214, 88, 140, 0.30), transparent 48%),
+    radial-gradient(circle at 88% 4%, rgba(242, 166, 198, 0.30), transparent 46%),
+    radial-gradient(circle at 50% 105%, rgba(255, 205, 225, 0.35), transparent 55%);
 }
 :root[data-theme="dark"] .auth-backdrop {
   background-color: var(--color-canvas-dark);
@@ -127,6 +127,14 @@ body {
 }
 .fade-up {
   animation: fade-up 0.35s ease-out both;
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.slide-in-right {
+  animation: slide-in-right 0.28s ease-out both;
 }
 
 /* thin scrollbars for the history/table panels */

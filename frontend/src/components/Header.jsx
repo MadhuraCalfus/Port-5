@@ -6,10 +6,10 @@ export function Header({ tabs, tab, onTab, theme, onToggleTheme, health, userLab
     <header className="border-b border-black/8 dark:border-white/10">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <div className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white">🎟️</span>
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white">💄</span>
           <div>
-            <h1 className="font-display text-base font-semibold leading-tight">TicketTrident</h1>
-            <p className="text-[11px] leading-tight text-ink/50 dark:text-ink-dark/50">Route Smarter. Resolve Faster.</p>
+            <h1 className="font-display text-base font-semibold leading-tight">NykaaPulse</h1>
+            <p className="text-[11px] leading-tight text-ink/50 dark:text-ink-dark/50">Shop, Review, Get Heard.</p>
           </div>
         </div>
 

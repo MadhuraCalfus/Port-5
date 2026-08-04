@@ -10,14 +10,14 @@ import {
   MessageSquare,
   ShieldCheck,
   Smile,
-  Ticket,
+  Sparkles,
   Users,
   Zap,
 } from "lucide-react";
 
 /* Far ring: well clear of the card on any viewport width. */
 const ICONS = [
-  { Icon: Ticket, top: "8%", left: "12%", size: 36, duration: "15s", delay: "0s" },
+  { Icon: Sparkles, top: "8%", left: "12%", size: 36, duration: "15s", delay: "0s" },
   { Icon: Headphones, top: "30%", left: "6%", size: 40, duration: "19s", delay: "2s" },
   { Icon: LifeBuoy, top: "56%", left: "8%", size: 30, duration: "17s", delay: "4s" },
   { Icon: Inbox, top: "80%", left: "10%", size: 32, duration: "21s", delay: "1s" },

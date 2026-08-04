@@ -43,7 +43,7 @@ def _cover_pdf_bytes(ticket: dict, comments: list[dict]) -> bytes:
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter, topMargin=0.6 * inch, bottomMargin=0.6 * inch)
     story = [
-        Paragraph(f"TicketTrident — Ticket #{ticket['id']} Report", _styles["Title"]),
+        Paragraph(f"NykaaPulse — Ticket #{ticket['id']} Report", _styles["Title"]),
         Paragraph(f"Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}", _styles["Normal"]),
         Spacer(1, 16),
     ]

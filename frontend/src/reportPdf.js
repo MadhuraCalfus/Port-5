@@ -13,7 +13,7 @@ export function generateAnalyticsPdf(data) {
   const generatedAt = new Date().toLocaleString();
 
   doc.setFontSize(18);
-  doc.text("TicketTrident — Analytics Report", 14, 18);
+  doc.text("NykaaPulse — Analytics Report", 14, 18);
   doc.setFontSize(10);
   doc.setTextColor(120);
   doc.text(`Generated ${generatedAt}`, 14, 25);
@@ -68,7 +68,7 @@ export function generateAnalyticsPdf(data) {
     });
   }
 
-  doc.save(`tickettrident-analytics-${new Date().toISOString().slice(0, 10)}.pdf`);
+  doc.save(`nykaapulse-analytics-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 export function generateTeamsPdf(teams) {
@@ -76,7 +76,7 @@ export function generateTeamsPdf(teams) {
   const generatedAt = new Date().toLocaleString();
 
   doc.setFontSize(18);
-  doc.text("TicketTrident — Teams Report", 14, 18);
+  doc.text("NykaaPulse — Teams Report", 14, 18);
   doc.setFontSize(10);
   doc.setTextColor(120);
   doc.text(`Generated ${generatedAt}`, 14, 25);
@@ -113,5 +113,5 @@ export function generateTeamsPdf(teams) {
     headStyles: { fillColor: [61, 107, 150] },
   });
 
-  doc.save(`tickettrident-teams-${new Date().toISOString().slice(0, 10)}.pdf`);
+  doc.save(`nykaapulse-teams-${new Date().toISOString().slice(0, 10)}.pdf`);
 }

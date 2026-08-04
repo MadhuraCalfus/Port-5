@@ -29,8 +29,8 @@ export function ForgotPasswordPage() {
       <Card className="relative z-10 w-full max-w-sm p-6">
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white">🎟️</span>
-            <h1 className="font-display text-lg font-semibold text-ink dark:text-ink-dark">TicketTrident</h1>
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white">💄</span>
+            <h1 className="font-display text-lg font-semibold text-ink dark:text-ink-dark">NykaaPulse</h1>
           </div>
           <button
             onClick={toggle}

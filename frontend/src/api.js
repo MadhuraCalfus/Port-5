@@ -174,9 +174,192 @@ export const api = {
   pmUpdateActionStatus: (id, status) =>
     request(`/pm/insights/actions/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
 
+  pmSentimentSeries: (periodType = "weekly", numPeriods = 8, endPeriodKey) =>
+    request(
+      `/pm/insights/sentiment-series?period_type=${periodType}&num_periods=${numPeriods}${endPeriodKey ? `&end_period_key=${endPeriodKey}` : ""}`,
+    ),
+
+  pmPeriodItems: (periodType = "weekly", periodKey) =>
+    request(`/pm/insights/items?period_type=${periodType}${periodKey ? `&period_key=${periodKey}` : ""}`),
+
+  pmInsightsRange: (start, end) => request(`/pm/insights/range?start=${start}&end=${end}`),
+
+  // ---- pm: custom surveys ----
+  pmCreateSurvey: (title, questions) =>
+    request("/pm/surveys", { method: "POST", body: JSON.stringify({ title, questions }) }),
+
+  pmListSurveys: () => request("/pm/surveys"),
+
+  pmSurveysOverview: () => request("/pm/surveys/overview"),
+
+  pmSendSurvey: (id) => request(`/pm/surveys/${id}/send`, { method: "POST" }),
+
+  pmSurveyResults: (id) => request(`/pm/surveys/${id}/results`),
+
+  // ---- customer: answering custom surveys ----
+  pendingSurveys: () => request("/surveys/pending"),
+
+  answerSurvey: (id, answers) => request(`/surveys/${id}/answer`, { method: "POST", body: JSON.stringify({ answers }) }),
+
   // ---- team ----
   teamTickets: () => request("/team/tickets"),
 
   teamUpdateStatus: (id, status) =>
     request(`/team/tickets/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+
+  nykaaTeamOrderTickets: () => request("/nykaa/team/order-tickets"),
+
+  nykaaTeamUpdateTicketStatus: (ticketId, status) =>
+    request(`/nykaa/team/order-tickets/${ticketId}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+
+  // ---- nykaa pulse: catalog (any logged-in role can browse) ----
+  nykaaListCategories: () => request("/nykaa/catalog/categories"),
+
+  nykaaListBrands: (categoryId) =>
+    request(`/nykaa/catalog/brands${categoryId ? `?category_id=${categoryId}` : ""}`),
+
+  nykaaListSubcategories: (categoryId) =>
+    request(`/nykaa/catalog/subcategories${categoryId ? `?category_id=${categoryId}` : ""}`),
+
+  nykaaListProducts: ({ categoryId, brandId, subcategoryId, search } = {}) => {
+    const params = new URLSearchParams();
+    if (categoryId) params.set("category_id", categoryId);
+    if (brandId) params.set("brand_id", brandId);
+    if (subcategoryId) params.set("subcategory_id", subcategoryId);
+    if (search) params.set("search", search);
+    const qs = params.toString();
+    return request(`/nykaa/catalog/products${qs ? `?${qs}` : ""}`);
+  },
+
+  nykaaGetProduct: (id) => request(`/nykaa/catalog/products/${id}`),
+
+  // Phase 4 "what customers say" — lazy-fetched per product (only once its
+  // panel is expanded), never eagerly for the whole grid.
+  nykaaProductSummary: (productId) => request(`/nykaa/catalog/products/${productId}/summary`),
+
+  // Phase 4 "ask the reviews" — grounded Q&A over one product's published reviews.
+  nykaaAskReviews: (productId, question) =>
+    request(`/nykaa/catalog/products/${productId}/ask`, { method: "POST", body: JSON.stringify({ question }) }),
+
+  // Beauty Portfolio — published reviews for one product, each tagged with
+  // the reviewer's current skin_type/hair_type (nullable). Same lazy-fetch-
+  // on-expand pattern as nykaaProductSummary.
+  nykaaProductReviews: (productId) => request(`/nykaa/catalog/products/${productId}/reviews`),
+
+  // ---- nykaa pulse: beauty portfolio (customer) ----
+  nykaaGetBeautyProfile: () => request("/nykaa/beauty-profile"),
+
+  nykaaUpdateBeautyProfile: (body) => request("/nykaa/beauty-profile", { method: "PUT", body: JSON.stringify(body) }),
+
+  nykaaRecommendedProducts: (section = "skin") => request(`/nykaa/catalog/recommended?section=${section}`),
+
+  nykaaBeautyRoutine: () => request("/nykaa/beauty-profile/routine"),
+
+  // ---- nykaa pulse: orders, reviews, delivery rating, raise-ticket (customer) ----
+  nykaaPlaceOrder: (items) => request("/nykaa/orders", { method: "POST", body: JSON.stringify({ items }) }),
+
+  nykaaMyOrders: () => request("/nykaa/orders/mine"),
+
+  nykaaSubmitReview: (orderId, itemId, body) =>
+    request(`/nykaa/orders/${orderId}/items/${itemId}/review`, { method: "POST", body: JSON.stringify(body) }),
+
+  nykaaGenerateReviewTitle: (description) =>
+    request("/nykaa/reviews/generate-title", { method: "POST", body: JSON.stringify({ description }) }),
+
+  nykaaSubmitDeliveryRating: (orderId, body) =>
+    request(`/nykaa/orders/${orderId}/delivery-rating`, { method: "POST", body: JSON.stringify(body) }),
+
+  nykaaSubmitAppFeedback: (body) => request("/nykaa/app-feedback", { method: "POST", body: JSON.stringify(body) }),
+
+  // Multi-turn "Raise a Ticket" chat — one turn per call; keeps returning
+  // {reply, escalated: false} while the bot is still trying to help, then
+  // {reply, escalated: true, ticket} once it hands off to a human team.
+  nykaaChatTurn: (orderId, itemId, message) =>
+    request(`/nykaa/orders/${orderId}/items/${itemId}/chat`, {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    }),
+
+  // Prior bot-phase turns for this item — lets a reopened chat restore
+  // where it left off instead of restarting from the greeting.
+  nykaaChatHistory: (orderId, itemId) => request(`/nykaa/orders/${orderId}/items/${itemId}/chat`),
+
+  // A file attached during the bot phase, before any ticket exists yet.
+  nykaaUploadChatAttachment: (orderId, itemId, file) =>
+    uploadFile(`/nykaa/orders/${orderId}/items/${itemId}/chat/attachments`, file),
+
+  nykaaDownloadChatAttachment: (orderId, itemId, turnId) =>
+    downloadFile(`/nykaa/orders/${orderId}/items/${itemId}/chat/attachments/${turnId}`),
+
+  // ---- nykaa pulse: np_ticket comment threads (post-escalation, customer <-> team) ----
+  nykaaTicketComments: (ticketId) => request(`/nykaa/tickets/${ticketId}/comments`),
+
+  nykaaPostTicketComment: (ticketId, body) =>
+    request(`/nykaa/tickets/${ticketId}/comments`, { method: "POST", body: JSON.stringify({ body }) }),
+
+  nykaaUploadTicketAttachment: (ticketId, file) => uploadFile(`/nykaa/tickets/${ticketId}/attachments`, file),
+
+  nykaaDownloadTicketAttachment: (ticketId, commentId) => downloadFile(`/nykaa/tickets/${ticketId}/attachments/${commentId}`),
+
+  nykaaMarkTicketCommentsRead: (ticketId) => request(`/nykaa/tickets/${ticketId}/comments/read`, { method: "POST" }),
+
+  nykaaSubmitCsat: (ticketId, rating, comment) =>
+    request(`/nykaa/tickets/${ticketId}/csat`, { method: "POST", body: JSON.stringify({ rating, comment: comment ?? null }) }),
+
+  // "Show off your look!" — an optional photo attached to a review.
+  nykaaUploadReviewPhoto: (orderId, itemId, file) =>
+    uploadFile(`/nykaa/orders/${orderId}/items/${itemId}/review/photo`, file),
+
+  // The photo endpoint requires an Authorization header, so a plain
+  // <img src="..."> can't authenticate against it directly. Instead this
+  // downloads the image as a blob (same authenticated-fetch pattern as
+  // downloadFile/downloadTicketAttachment) and hands back an object URL —
+  // that IS a plain string an <img> tag can use directly. Mirrors how
+  // CommentThread.jsx's openAttachment() downloads ticket attachments.
+  // Caller is responsible for URL.revokeObjectURL() once done with it.
+  nykaaReviewPhotoUrl: async (orderId, itemId) => {
+    const blob = await downloadFile(`/nykaa/orders/${orderId}/items/${itemId}/review/photo`);
+    return URL.createObjectURL(blob);
+  },
+
+  // ---- nykaa pulse: admin (order oversight) ----
+  nykaaAdminListOrders: () => request("/nykaa/admin/orders"),
+
+  nykaaAdminListTickets: () => request("/nykaa/admin/tickets"),
+
+  nykaaAdminAnalytics: () => request("/nykaa/admin/analytics"),
+
+  nykaaDownloadTicketReport: (ticketId) => downloadFile(`/nykaa/admin/tickets/${ticketId}/report.pdf`),
+
+  // ---- nykaa pulse: resolved by AI, no ticket raised (admin + team) ----
+  nykaaAiResolvedChats: () => request("/nykaa/ai-resolved-chats"),
+
+  nykaaAiResolvedChatTranscript: (orderId, itemId) => request(`/nykaa/ai-resolved-chats/${orderId}/${itemId}`),
+
+  // ---- nykaa pulse: pm catalog-aware analytics (Phase 3) ----
+  nykaaPmOverview: () => request("/nykaa/pm/overview"),
+
+  nykaaPmFeedback: () => request("/nykaa/pm/feedback"),
+
+  nykaaPmProductRollup: () => request("/nykaa/pm/product-rollup"),
+
+  nykaaPmAppFeedback: () => request("/nykaa/pm/app-feedback"),
+
+  nykaaPmAppFeedbackAnalytics: () => request("/nykaa/pm/app-feedback/analytics"),
+
+  nykaaPmDeliveryFeedbackAnalytics: () => request("/nykaa/pm/delivery-feedback/analytics"),
+
+  nykaaPmBrandBreakdown: (periodType = "monthly", periodKey) =>
+    request(`/nykaa/pm/brand-breakdown?period_type=${periodType}${periodKey ? `&period_key=${periodKey}` : ""}`),
+
+  nykaaPmCategoryBreakdown: (periodType = "monthly", periodKey) =>
+    request(`/nykaa/pm/category-breakdown?period_type=${periodType}${periodKey ? `&period_key=${periodKey}` : ""}`),
+
+  nykaaPmWeeklyReport: (periodType = "weekly", periodKey) =>
+    request(`/nykaa/pm/weekly-report?period_type=${periodType}${periodKey ? `&period_key=${periodKey}` : ""}`),
+
+  // Phase 4 "brand scorecards" — one short AI-written line per brand, layered
+  // on top of the same brand-breakdown numbers the Brands tab already shows.
+  nykaaPmBrandScorecards: (periodType = "monthly", periodKey) =>
+    request(`/nykaa/pm/brand-scorecards?period_type=${periodType}${periodKey ? `&period_key=${periodKey}` : ""}`),
 };

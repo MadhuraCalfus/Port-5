@@ -1,33 +1,99 @@
-import { useEffect, useState } from "react";
-import { Loader2, RefreshCw, Upload } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, Search } from "lucide-react";
 import { api } from "../../api";
-import { Button, Card } from "../../components/primitives";
+import { Card } from "../../components/primitives";
+import { MONTHS, dayKey, daysInMonth, isoWeekKey, weeksInMonth, yearOptions } from "../../periodNav";
 
-const SOURCE_TYPES = [
-  { id: "review", label: "Reviews" },
-  { id: "survey", label: "Surveys" },
+const PERIOD_TYPES = [
+  { id: "all", label: "All time" },
+  { id: "daily", label: "Daily" },
+  { id: "weekly", label: "Weekly" },
+  { id: "monthly", label: "Monthly" },
+  { id: "yearly", label: "Yearly" },
+];
+
+const CATEGORIES = [
+  "Product Quality & Fit",
+  "Packaging & Damage",
+  "Delivery & Logistics",
+  "Review & App Flow Friction",
+  "Authenticity & Trust",
+  "Personalization Mismatch",
+  "Pricing & Offers",
+  "Rewards & Loyalty",
+  "Customer Support",
+  "General Praise / Other",
+];
+
+const SENTIMENT_TABS = [
+  { id: "all", label: "All sentiment" },
+  { id: "positive", label: "Positive" },
+  { id: "neutral", label: "Neutral" },
+  { id: "negative", label: "Negative" },
 ];
 
 const SENTIMENT_STYLES = {
   positive: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   neutral: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
   negative: "bg-red-500/10 text-red-600 dark:text-red-400",
-  mixed: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+};
+
+// A 3-way bucket for the raw 0-1 urgency_score — plain thresholds, not an
+// LLM judgment, so the same score always lands in the same tier.
+function urgencyTier(score) {
+  if (score >= 0.6) return "High";
+  if (score >= 0.3) return "Medium";
+  return "Low";
+}
+
+const URGENCY_STYLES = {
+  High: "bg-red-500/10 text-red-600 dark:text-red-400",
+  Medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  Low: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
 };
 
 export function ImportFeedbackPage() {
-  const [sourceType, setSourceType] = useState("review");
-  const [text, setText] = useState("");
-  const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
   const [items, setItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(false);
 
-  async function loadRecent() {
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [sentimentTab, setSentimentTab] = useState("all");
+
+  const [periodType, setPeriodType] = useState("all");
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
+  const [selectedWeekKey, setSelectedWeekKey] = useState(() => isoWeekKey(new Date()));
+  const [selectedDayKey, setSelectedDayKey] = useState(() => dayKey(new Date()));
+
+  const yearOptionsList = useMemo(() => yearOptions(), []);
+  const weekOptions = useMemo(() => weeksInMonth(selectedYear, selectedMonth), [selectedYear, selectedMonth]);
+  const dayOptions = useMemo(() => daysInMonth(selectedYear, selectedMonth), [selectedYear, selectedMonth]);
+
+  useEffect(() => {
+    if (weekOptions.length > 0 && !weekOptions.some((w) => w.key === selectedWeekKey)) {
+      setSelectedWeekKey(weekOptions[0].key);
+    }
+  }, [weekOptions, selectedWeekKey]);
+  useEffect(() => {
+    if (dayOptions.length > 0 && !dayOptions.some((d) => d.key === selectedDayKey)) {
+      setSelectedDayKey(dayOptions[0].key);
+    }
+  }, [dayOptions, selectedDayKey]);
+
+  const periodKey =
+    periodType === "yearly"
+      ? String(selectedYear)
+      : periodType === "monthly"
+        ? `${selectedYear}-${String(selectedMonth).padStart(2, "0")}`
+        : periodType === "weekly"
+          ? selectedWeekKey
+          : selectedDayKey;
+
+  async function load(pt, pk) {
     setLoadingItems(true);
     try {
-      const r = await api.pmFeedback(50);
+      const r = pt === "all" ? await api.pmFeedback(500) : await api.pmPeriodItems(pt, pk);
       setItems(r.items);
     } finally {
       setLoadingItems(false);
@@ -35,120 +101,206 @@ export function ImportFeedbackPage() {
   }
 
   useEffect(() => {
-    loadRecent();
-  }, []);
+    load(periodType, periodKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodType, periodKey]);
 
-  async function submit() {
-    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-    if (lines.length === 0) return;
-    setImporting(true);
-    setError(null);
-    setResult(null);
-    try {
-      const r = await api.pmImportFeedback(sourceType, lines);
-      setResult(r);
-      setText("");
-      await loadRecent();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setImporting(false);
-    }
-  }
+  const filtered = useMemo(() => {
+    return items
+      .filter((i) => categoryFilter === "all" || i.category === categoryFilter)
+      .filter((i) => sentimentTab === "all" || i.sentiment_label === sentimentTab)
+      .filter(
+        (i) =>
+          !search.trim() ||
+          i.text.toLowerCase().includes(search.trim().toLowerCase()) ||
+          i.category?.toLowerCase().includes(search.trim().toLowerCase()) ||
+          i.theme?.toLowerCase().includes(search.trim().toLowerCase()),
+      )
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }, [items, categoryFilter, sentimentTab, search]);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-      <Card className="p-6">
-        <h2 className="font-display text-lg font-semibold">Import reviews or surveys</h2>
-        <p className="mt-1.5 text-sm leading-relaxed text-ink/60 dark:text-ink-dark/60">
-          Paste one review or survey response per line. Each is run through the same sentiment/theme/urgency
-          analysis as tickets, and added to the customer voice log below.
-        </p>
+    <div className="space-y-6">
+      <h2 className="font-display text-lg font-semibold">All feedback ({items.length})</h2>
 
-        <div className="mt-4 grid grid-cols-2 gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] p-1">
-          {SOURCE_TYPES.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setSourceType(id)}
-              className={`rounded-lg py-2 text-xs font-medium transition ${
-                sourceType === id
-                  ? "bg-surface dark:bg-surface-dark text-brand dark:text-brand-dim shadow-sm"
-                  : "text-ink/50 dark:text-ink-dark/50 hover:text-ink dark:hover:text-ink-dark"
-              }`}
+      <Card className="p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-5 gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] p-1">
+              {PERIOD_TYPES.map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setPeriodType(id)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                    periodType === id
+                      ? "bg-surface dark:bg-surface-dark text-brand dark:text-brand-dim shadow-sm"
+                      : "text-ink/50 dark:text-ink-dark/50 hover:text-ink dark:hover:text-ink-dark"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {periodType !== "all" && (
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="rounded-lg border border-black/10 dark:border-white/15 bg-transparent px-2 py-1.5 text-xs text-ink dark:text-ink-dark"
+              >
+                {yearOptionsList.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {(periodType === "monthly" || periodType === "weekly" || periodType === "daily") && (
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                className="rounded-lg border border-black/10 dark:border-white/15 bg-transparent px-2 py-1.5 text-xs text-ink dark:text-ink-dark"
+              >
+                {MONTHS.map((m, i) => (
+                  <option key={m} value={i + 1}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {periodType === "weekly" && (
+              <select
+                value={selectedWeekKey}
+                onChange={(e) => setSelectedWeekKey(e.target.value)}
+                className="rounded-lg border border-black/10 dark:border-white/15 bg-transparent px-2 py-1.5 text-xs text-ink dark:text-ink-dark"
+              >
+                {weekOptions.map((w) => (
+                  <option key={w.key} value={w.key}>
+                    {w.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {periodType === "daily" && (
+              <select
+                value={selectedDayKey}
+                onChange={(e) => setSelectedDayKey(e.target.value)}
+                className="rounded-lg border border-black/10 dark:border-white/15 bg-transparent px-2 py-1.5 text-xs text-ink dark:text-ink-dark"
+              >
+                {dayOptions.map((d) => (
+                  <option key={d.key} value={d.key}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="rounded-lg border border-black/10 dark:border-white/15 bg-transparent px-2 py-1.5 text-xs text-ink dark:text-ink-dark"
             >
-              {label}
-            </button>
-          ))}
-        </div>
+              <option value="all">All categories</option>
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
 
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={"One item per line, e.g.\nThe checkout page took forever to load today.\nLove the new dark mode!"}
-          rows={10}
-          className="mt-4 w-full resize-none rounded-xl border border-black/10 dark:border-white/15 bg-black/[0.02] dark:bg-white/[0.03] p-3.5 text-sm outline-none focus:border-brand/60 focus:ring-2 focus:ring-brand/20"
-        />
-
-        <div className="mt-4 flex items-center gap-3 border-t border-black/5 dark:border-white/10 pt-4">
-          <Button onClick={submit} disabled={importing || !text.trim()}>
-            {importing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-            {importing ? "Analyzing..." : "Import & analyze"}
-          </Button>
-        </div>
-
-        {result && (
-          <p className="mt-3 rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400">
-            Imported {result.imported} item{result.imported === 1 ? "" : "s"}
-            {result.skipped > 0 ? ` (${result.skipped} blank line${result.skipped === 1 ? "" : "s"} skipped)` : ""}.
-          </p>
-        )}
-        {error && <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
-      </Card>
-
-      <Card className="p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-lg font-semibold">Customer voice log ({items.length})</h2>
-          <button
-            onClick={loadRecent}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
-          >
-            <RefreshCw size={13} className={loadingItems ? "animate-spin" : ""} /> Refresh
-          </button>
-        </div>
-        <p className="mt-1 text-sm text-ink/60 dark:text-ink-dark/60">
-          Every ticket, review, and survey response analyzed so far, most recent first.
-        </p>
-
-        {items.length === 0 ? (
-          <p className="mt-6 text-center text-sm text-ink/50 dark:text-ink-dark/50">
-            Nothing yet — imported reviews/surveys and submitted tickets will show up here.
-          </p>
-        ) : (
-          <div className="thin-scroll mt-4 max-h-[560px] space-y-2.5 overflow-y-auto pr-1">
-            {items.map((i) => (
-              <div key={i.id} className="fade-up rounded-xl border border-black/8 dark:border-white/10 p-3.5">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-sm text-ink/80 dark:text-ink-dark/80">"{i.text}"</p>
-                  <span className="shrink-0 rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink/50 dark:text-ink-dark/50">
-                    {i.source_type}
-                  </span>
-                </div>
-                <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${SENTIMENT_STYLES[i.sentiment_label] ?? SENTIMENT_STYLES.neutral}`}>
-                    {i.sentiment_label} ({i.sentiment_score >= 0 ? "+" : ""}{i.sentiment_score.toFixed(1)})
-                  </span>
-                  <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium text-brand dark:text-brand-dim">
-                    {i.theme}
-                  </span>
-                  <span className="text-[11px] text-ink/50 dark:text-ink-dark/50">
-                    urgency {Math.round(i.urgency_score * 100)}%
-                  </span>
-                </div>
-              </div>
-            ))}
+            <select
+              value={sentimentTab}
+              onChange={(e) => setSentimentTab(e.target.value)}
+              className="rounded-lg border border-black/10 dark:border-white/15 bg-transparent px-2 py-1.5 text-xs text-ink dark:text-ink-dark"
+            >
+              {SENTIMENT_TABS.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
           </div>
-        )}
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1.5 rounded-lg border border-black/10 dark:border-white/15 px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50">
+              <Search size={13} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search text, category, or theme..."
+                className="w-40 bg-transparent text-xs text-ink dark:text-ink-dark placeholder:text-ink/40 dark:placeholder:text-ink-dark/40 outline-none"
+              />
+            </label>
+            <button
+              onClick={() => load(periodType, periodKey)}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
+            >
+              {loadingItems ? <Loader2 size={13} className="animate-spin" /> : null} Refresh
+            </button>
+          </div>
+        </div>
+
+        <div className="thin-scroll mt-3 max-h-[650px] overflow-auto rounded-xl border border-black/10 dark:border-white/15">
+          <table className="w-full text-left text-sm">
+            <thead className="sticky top-0 bg-black/[0.03] dark:bg-white/[0.05] text-[11px] uppercase tracking-wide text-ink/40 dark:text-ink-dark/40">
+              <tr>
+                <th className="px-3 py-2">Date</th>
+                <th className="px-3 py-2">Details</th>
+                <th className="px-3 py-2">Category</th>
+                <th className="px-3 py-2">Theme</th>
+                <th className="px-3 py-2">Rating</th>
+                <th className="px-3 py-2">Sentiment</th>
+                <th className="px-3 py-2">Confidence</th>
+                <th className="px-3 py-2">Urgency</th>
+                <th className="px-3 py-2">Actionable</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-black/5 dark:divide-white/10">
+              {filtered.map((i) => {
+                const tier = urgencyTier(i.urgency_score);
+                return (
+                  <tr key={i.id} className="align-top">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-ink/50 dark:text-ink-dark/50">
+                      {new Date(i.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="max-w-sm px-3 py-2.5 text-ink/80 dark:text-ink-dark/80">{i.text}</td>
+                    <td className="px-3 py-2.5">
+                      <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium text-brand dark:text-brand-dim">
+                        {i.category}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-ink/70 dark:text-ink-dark/70">
+                      {i.theme ?? <span className="text-ink/30 dark:text-ink-dark/30">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-ink/70 dark:text-ink-dark/70">
+                      {i.rating ? `★ ${i.rating}` : <span className="text-ink/30 dark:text-ink-dark/30">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${SENTIMENT_STYLES[i.sentiment_label] ?? SENTIMENT_STYLES.neutral}`}>
+                        {i.sentiment_label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-ink/70 dark:text-ink-dark/70">{Math.round(Math.abs(i.sentiment_score) * 100)}%</td>
+                    <td className="px-3 py-2.5">
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${URGENCY_STYLES[tier]}`}>{tier}</span>
+                    </td>
+                    <td className="px-3 py-2.5">{i.is_actionable_ticket ? "Yes" : "No"}</td>
+                  </tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="px-3 py-6 text-center text-sm text-ink/50 dark:text-ink-dark/50">
+                    {search ? `Nothing matches "${search}".` : "Nothing here yet."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
     </div>
   );

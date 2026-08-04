@@ -36,7 +36,34 @@ ASSUMED_MANUAL_SECONDS = 90.0
 # One pool per process, opened lazily on first use and reused for the life of
 # the app — a network round trip to open a fresh TCP+TLS connection per query
 # is fine for a local SQLite file but not for a remote Postgres instance.
-_pool = ConnectionPool(DATABASE_URL, min_size=1, max_size=10, kwargs={"row_factory": dict_row}, open=False)
+#
+# keepalives_* make a dead-but-still-"open" connection (e.g. after the dev
+# machine sleeps/wakes or switches networks) fail within ~60s instead of
+# hanging on a TCP read with no timeout — without this, a request that grabs
+# that connection just blocks forever, tying up a worker thread, and the
+# whole app looks hung rather than erroring.
+#
+# No `check=` liveness probe: against a distant Postgres instance, that
+# probe is itself a full extra network round-trip on every single pool
+# checkout — with a query round-trip already costing several hundred ms
+# here, that was roughly doubling the cost of every database call app-wide.
+# keepalives_* above already catch a truly dead connection (surfacing as a
+# real query error instead of being silently swapped out beforehand), which
+# is the trade-off for the speed.
+_pool = ConnectionPool(
+    DATABASE_URL,
+    min_size=1,
+    max_size=10,
+    kwargs={
+        "row_factory": dict_row,
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 3,
+        "connect_timeout": 10,
+    },
+    open=False,
+)
 atexit.register(_pool.close)
 
 # Every id (users.id, team_members.id, tickets.id, tickets.user_id) is a
@@ -113,20 +140,25 @@ _SELF_RESOLVED_SCHEMA = """
 # tickets.id when source_type = 'ticket' (a ticket is mirrored here, not
 # moved — the ticket row and its routing lifecycle are untouched); it's NULL
 # for 'review'/'survey' rows, which have no other home in this app.
-# sentiment/theme/urgency/is_actionable_ticket start NULL and are filled in
-# by the AI analysis pipeline (a later phase) — this table exists first so
-# ingestion can start independently of that pipeline being built.
+# sentiment/category/theme/urgency/is_actionable_ticket start NULL and are
+# filled in by the AI analysis pipeline (a later phase) — this table exists
+# first so ingestion can start independently of that pipeline being built.
+# category is the closed top-level taxonomy (models.FeedbackCategory); theme
+# is a finer-grained, free-text sub-topic within it.
 _FEEDBACK_ITEMS_SCHEMA = """
     CREATE TABLE IF NOT EXISTS feedback_items (
         id SERIAL PRIMARY KEY,
         source_type TEXT NOT NULL,
         source_ref INTEGER,
+        user_id INTEGER,
         text TEXT NOT NULL,
         sentiment_label TEXT,
         sentiment_score REAL,
+        category TEXT,
         theme TEXT,
         urgency_score REAL,
         is_actionable_ticket INTEGER,
+        rating INTEGER,
         model_used TEXT,
         mode TEXT,
         latency_ms INTEGER,
@@ -145,7 +177,7 @@ _PERIODIC_INSIGHTS_SCHEMA = """
         period_key TEXT NOT NULL,
         period_start TEXT NOT NULL,
         period_end TEXT NOT NULL,
-        theme_trend_json TEXT,
+        category_trend_json TEXT,
         sentiment_trend_json TEXT,
         narrative_json TEXT,
         model_used TEXT,
@@ -155,7 +187,7 @@ _PERIODIC_INSIGHTS_SCHEMA = """
     )
 """
 
-# AI-recommended actions for improving a theme's sentiment. Anchored to
+# AI-recommended actions for improving a category's sentiment. Anchored to
 # (period_type, period_key) directly rather than requiring a periodic_insights
 # row to exist first — trend-based actions (this phase) are generated before
 # the narrative-report table gets its first row (a later phase); insight_id
@@ -168,11 +200,41 @@ _RECOMMENDED_ACTIONS_SCHEMA = """
         period_type TEXT NOT NULL,
         period_key TEXT NOT NULL,
         insight_id INTEGER,
-        theme TEXT,
+        category TEXT,
         action_text TEXT NOT NULL,
         rationale TEXT,
         status TEXT NOT NULL DEFAULT 'pending',
         created_at TEXT NOT NULL
+    )
+"""
+
+# PM-authored ad-hoc surveys (distinct from the fixed 1-5 star + comment
+# survey in feedback_items/feedback_ai — these are one-off structured
+# question sets the PM writes themselves, never touching the AI pipeline).
+# One shared scale per survey; the questions are a JSON list rather than a
+# child table.
+_CUSTOM_SURVEYS_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS custom_surveys (
+        id SERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        scale_points INTEGER NOT NULL,
+        questions_json TEXT NOT NULL,
+        created_by TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        created_at TEXT NOT NULL,
+        sent_at TEXT
+    )
+"""
+
+# One row per (survey, customer) response — UNIQUE enforces "answer once".
+_SURVEY_RESPONSES_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS survey_responses (
+        id SERIAL PRIMARY KEY,
+        survey_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        answers_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (survey_id, user_id)
     )
 """
 
@@ -235,6 +297,36 @@ def init_db() -> None:
         conn.execute(_FEEDBACK_ITEMS_SCHEMA)
         conn.execute(_PERIODIC_INSIGHTS_SCHEMA)
         conn.execute(_RECOMMENDED_ACTIONS_SCHEMA)
+        conn.execute(_CUSTOM_SURVEYS_SCHEMA)
+        conn.execute(_SURVEY_RESPONSES_SCHEMA)
+
+
+        # feedback_items initially shipped with no user_id — added so the PM
+        # dashboard can group a customer's tickets/surveys by who submitted
+        # them; imported reviews have no account behind them and stay NULL.
+        feedback_cols = _existing_columns(conn, "feedback_items")
+        if "user_id" not in feedback_cols:
+            conn.execute("ALTER TABLE feedback_items ADD COLUMN user_id INTEGER")
+        if "rating" not in feedback_cols:
+            conn.execute("ALTER TABLE feedback_items ADD COLUMN rating INTEGER")
+
+        # Category/theme taxonomy split: the old flat `theme` column (9 fixed
+        # values) becomes `category` (11 fixed top-level values) plus a new,
+        # finer-grained free-text `theme` column (e.g. "Password Reset" under
+        # "Login & Account"). The rename preserves existing rows' data as-is;
+        # a one-off reclassification script re-analyzes old rows into the new
+        # taxonomy afterward, since the split isn't a pure rename (see
+        # models.FeedbackCategory). Same rename applies to recommended_actions
+        # below, which stays at category granularity only (no new theme column).
+        if "category" not in feedback_cols and "theme" in feedback_cols:
+            conn.execute("ALTER TABLE feedback_items RENAME COLUMN theme TO category")
+            feedback_cols = _existing_columns(conn, "feedback_items")
+        if "theme" not in feedback_cols:
+            conn.execute("ALTER TABLE feedback_items ADD COLUMN theme TEXT")
+
+        action_cat_cols = _existing_columns(conn, "recommended_actions")
+        if "category" not in action_cat_cols and "theme" in action_cat_cols:
+            conn.execute("ALTER TABLE recommended_actions RENAME COLUMN theme TO category")
 
         # recommended_actions initially shipped with insight_id NOT NULL and
         # no period_type/period_key — corrected before this table had any
@@ -259,6 +351,8 @@ def init_db() -> None:
                 "ALTER TABLE periodic_insights ADD CONSTRAINT periodic_insights_period_type_period_key_key "
                 "UNIQUE (period_type, period_key)"
             )
+        if "category_trend_json" not in insight_cols and "theme_trend_json" in insight_cols:
+            conn.execute("ALTER TABLE periodic_insights RENAME COLUMN theme_trend_json TO category_trend_json")
 
         # Attachment support added after ticket_comments already existed in
         # some databases — same in-place nullable-column pattern as above.
@@ -613,24 +707,28 @@ def save_feedback_item(
     text: str,
     sentiment_label: str,
     sentiment_score: float,
-    theme: str,
+    category: str,
     urgency_score: float,
     is_actionable_ticket: bool | None,
     model_used: str,
     mode: str,
     latency_ms: int,
     source_ref: int | None = None,
+    user_id: int | None = None,
+    rating: int | None = None,
+    theme: str | None = None,
+    created_at: str | None = None,
 ) -> dict:
     with _conn() as conn:
         row = conn.execute(
             """INSERT INTO feedback_items (
-                source_type, source_ref, text, sentiment_label, sentiment_score, theme,
-                urgency_score, is_actionable_ticket, model_used, mode, latency_ms, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+                source_type, source_ref, user_id, text, sentiment_label, sentiment_score, category, theme,
+                urgency_score, is_actionable_ticket, rating, model_used, mode, latency_ms, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
             (
-                source_type, source_ref, text, sentiment_label, sentiment_score, theme,
+                source_type, source_ref, user_id, text, sentiment_label, sentiment_score, category, theme,
                 urgency_score, int(is_actionable_ticket) if is_actionable_ticket is not None else None,
-                model_used, mode, latency_ms, _now(),
+                rating, model_used, mode, latency_ms, created_at or _now(),
             ),
         ).fetchone()
         return _feedback_item_row_to_dict(row)
@@ -644,20 +742,63 @@ def list_feedback_items(limit: int = 100000, offset: int = 0) -> list[dict]:
         return [_feedback_item_row_to_dict(r) for r in rows]
 
 
+def list_feedback_items_between(start: str, end_exclusive: str) -> list[dict]:
+    """Every feedback_items row with created_at in [start, end_exclusive) —
+    used to export exactly one period's worth of data (PDF/CSV), independent
+    of the `limit` cap list_feedback_items applies for dashboard views."""
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM feedback_items WHERE created_at >= %s AND created_at < %s ORDER BY created_at ASC",
+            (start, end_exclusive),
+        ).fetchall()
+        return [_feedback_item_row_to_dict(r) for r in rows]
+
+
 def _feedback_item_row_to_dict(row: dict) -> dict:
     d = dict(row)
     d["is_actionable_ticket"] = bool(d["is_actionable_ticket"]) if d["is_actionable_ticket"] is not None else None
     return d
 
 
-# ---- recommended actions (AI suggestions per theme, per period) ----------
-
-def save_recommended_action(period_type: str, period_key: str, theme: str | None, action_text: str, rationale: str | None) -> dict:
+def update_feedback_analysis(
+    item_id: int,
+    text: str,
+    category: str,
+    theme: str,
+    sentiment_label: str,
+    sentiment_score: float,
+    urgency_score: float,
+    is_actionable_ticket: bool,
+    model_used: str,
+    mode: str,
+) -> dict | None:
+    """Re-analyze one existing feedback_items row in place — used by the
+    one-off reclassify_feedback.py maintenance script when the category/
+    theme taxonomy changes. Overwrites `text` too, so a legacy survey row's
+    display bug (raw "Survey rating: N/5..." text) can be cleaned up in the
+    same pass as its re-classification."""
     with _conn() as conn:
         row = conn.execute(
-            """INSERT INTO recommended_actions (period_type, period_key, theme, action_text, rationale, status, created_at)
+            """UPDATE feedback_items SET
+                text = %s, category = %s, theme = %s, sentiment_label = %s, sentiment_score = %s,
+                urgency_score = %s, is_actionable_ticket = %s, model_used = %s, mode = %s
+               WHERE id = %s RETURNING *""",
+            (
+                text, category, theme, sentiment_label, sentiment_score, urgency_score,
+                int(is_actionable_ticket), model_used, mode, item_id,
+            ),
+        ).fetchone()
+        return _feedback_item_row_to_dict(row) if row else None
+
+
+# ---- recommended actions (AI suggestions per category, per period) -------
+
+def save_recommended_action(period_type: str, period_key: str, category: str | None, action_text: str, rationale: str | None) -> dict:
+    with _conn() as conn:
+        row = conn.execute(
+            """INSERT INTO recommended_actions (period_type, period_key, category, action_text, rationale, status, created_at)
                VALUES (%s, %s, %s, %s, %s, 'pending', %s) RETURNING *""",
-            (period_type, period_key, theme, action_text, rationale, _now()),
+            (period_type, period_key, category, action_text, rationale, _now()),
         ).fetchone()
         return dict(row)
 
@@ -701,7 +842,7 @@ def upsert_periodic_insight(
     period_key: str,
     period_start: str,
     period_end: str,
-    theme_trend: dict,
+    category_trend: dict,
     sentiment_trend: dict,
     narrative: dict,
     model_used: str,
@@ -710,17 +851,17 @@ def upsert_periodic_insight(
     with _conn() as conn:
         row = conn.execute(
             """INSERT INTO periodic_insights (
-                period_type, period_key, period_start, period_end, theme_trend_json,
+                period_type, period_key, period_start, period_end, category_trend_json,
                 sentiment_trend_json, narrative_json, model_used, mode, generated_at
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (period_type, period_key) DO UPDATE SET
                 period_start = EXCLUDED.period_start, period_end = EXCLUDED.period_end,
-                theme_trend_json = EXCLUDED.theme_trend_json, sentiment_trend_json = EXCLUDED.sentiment_trend_json,
+                category_trend_json = EXCLUDED.category_trend_json, sentiment_trend_json = EXCLUDED.sentiment_trend_json,
                 narrative_json = EXCLUDED.narrative_json, model_used = EXCLUDED.model_used,
                 mode = EXCLUDED.mode, generated_at = EXCLUDED.generated_at
             RETURNING *""",
             (
-                period_type, period_key, period_start, period_end, json.dumps(theme_trend),
+                period_type, period_key, period_start, period_end, json.dumps(category_trend),
                 json.dumps(sentiment_trend), json.dumps(narrative), model_used, mode, _now(),
             ),
         ).fetchone()
@@ -738,9 +879,100 @@ def get_periodic_insight(period_type: str, period_key: str) -> dict | None:
 
 def _periodic_insight_row_to_dict(row: dict) -> dict:
     d = dict(row)
-    d["theme_trend"] = json.loads(d.pop("theme_trend_json")) if d.get("theme_trend_json") else None
+    d["category_trend"] = json.loads(d.pop("category_trend_json")) if d.get("category_trend_json") else None
     d["sentiment_trend"] = json.loads(d.pop("sentiment_trend_json")) if d.get("sentiment_trend_json") else None
     d["narrative"] = json.loads(d.pop("narrative_json")) if d.get("narrative_json") else None
+    return d
+
+
+# ---- custom surveys (PM-authored, ad-hoc question sets) -------------------
+
+def create_custom_survey(title: str, scale_points: int, questions: list[str], created_by: str | None) -> dict:
+    with _conn() as conn:
+        row = conn.execute(
+            """INSERT INTO custom_surveys (title, scale_points, questions_json, created_by, status, created_at)
+               VALUES (%s, %s, %s, %s, 'draft', %s) RETURNING *""",
+            (title, scale_points, json.dumps(questions), created_by, _now()),
+        ).fetchone()
+        return _custom_survey_row_to_dict(row)
+
+
+def list_custom_surveys() -> list[dict]:
+    """Every survey the PM has authored, most recent first, with how many
+    customers have answered it so far — one query rather than N+1 since the
+    Create Survey tab's table needs the count for every row at once."""
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT custom_surveys.*, COUNT(survey_responses.id) AS response_count
+               FROM custom_surveys
+               LEFT JOIN survey_responses ON survey_responses.survey_id = custom_surveys.id
+               GROUP BY custom_surveys.id
+               ORDER BY custom_surveys.created_at DESC"""
+        ).fetchall()
+        return [_custom_survey_row_to_dict(r) for r in rows]
+
+
+def get_custom_survey(survey_id: int) -> dict | None:
+    with _conn() as conn:
+        row = conn.execute("SELECT * FROM custom_surveys WHERE id = %s", (survey_id,)).fetchone()
+        return _custom_survey_row_to_dict(row) if row else None
+
+
+def mark_survey_sent(survey_id: int) -> dict | None:
+    with _conn() as conn:
+        row = conn.execute(
+            "UPDATE custom_surveys SET status = 'sent', sent_at = %s WHERE id = %s RETURNING *",
+            (_now(), survey_id),
+        ).fetchone()
+        return _custom_survey_row_to_dict(row) if row else None
+
+
+def list_pending_surveys_for_user(user_id: int) -> list[dict]:
+    """Every sent survey this customer hasn't answered yet, oldest first —
+    the floating "hey, new survey" card on the customer's Feedback Survey
+    tab works through these one at a time."""
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT custom_surveys.* FROM custom_surveys
+               LEFT JOIN survey_responses
+                 ON survey_responses.survey_id = custom_surveys.id AND survey_responses.user_id = %s
+               WHERE custom_surveys.status = 'sent' AND survey_responses.id IS NULL
+               ORDER BY custom_surveys.sent_at ASC""",
+            (user_id,),
+        ).fetchall()
+        return [_custom_survey_row_to_dict(r) for r in rows]
+
+
+def save_survey_response(survey_id: int, user_id: int, answers: list[int]) -> dict | None:
+    """ON CONFLICT DO NOTHING backed by UNIQUE(survey_id, user_id) — a
+    customer answering the same survey twice (e.g. a double-submit) is a
+    safe no-op rather than an error."""
+    with _conn() as conn:
+        row = conn.execute(
+            """INSERT INTO survey_responses (survey_id, user_id, answers_json, created_at)
+               VALUES (%s, %s, %s, %s)
+               ON CONFLICT (survey_id, user_id) DO NOTHING
+               RETURNING *""",
+            (survey_id, user_id, json.dumps(answers), _now()),
+        ).fetchone()
+        return _survey_response_row_to_dict(row) if row else None
+
+
+def list_survey_responses(survey_id: int) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute("SELECT * FROM survey_responses WHERE survey_id = %s", (survey_id,)).fetchall()
+        return [_survey_response_row_to_dict(r) for r in rows]
+
+
+def _custom_survey_row_to_dict(row: dict) -> dict:
+    d = dict(row)
+    d["questions"] = json.loads(d.pop("questions_json"))
+    return d
+
+
+def _survey_response_row_to_dict(row: dict) -> dict:
+    d = dict(row)
+    d["answers"] = json.loads(d.pop("answers_json"))
     return d
 
 

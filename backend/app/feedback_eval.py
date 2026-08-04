@@ -6,6 +6,11 @@ test data, not real customer feedback, so it has no place in the PM
 dashboard's real numbers. Rehearses the shape of a mentor's blind 10-input
 test: run each sample, compare against ground truth, report per-item and
 aggregate accuracy.
+
+category is graded by exact match (a closed taxonomy); theme is
+intentionally open vocabulary (see feedback_ai.SYSTEM_PROMPT), so it's
+reported but not graded — there's no single "correct" phrasing to match
+exactly the way there is for category.
 """
 from dataclasses import dataclass
 
@@ -23,16 +28,13 @@ class EvalResult:
     expected_actionable: bool
     actual_actionable: bool
     actionable_correct: bool
-    theme_keywords: list[str]
+    expected_category: str
+    actual_category: str
+    category_correct: bool
+    expected_theme: str
     actual_theme: str
-    theme_correct: bool
     mode: str
     latency_ms: int
-
-
-def _theme_matches(actual_theme: str, keywords: list[str]) -> bool:
-    lowered = actual_theme.lower()
-    return any(kw.lower() in lowered for kw in keywords)
 
 
 def run_eval() -> list[EvalResult]:
@@ -50,9 +52,11 @@ def run_eval() -> list[EvalResult]:
                 expected_actionable=sample["expected_actionable"],
                 actual_actionable=a.is_actionable_ticket,
                 actionable_correct=a.is_actionable_ticket == sample["expected_actionable"],
-                theme_keywords=sample["theme_keywords"],
+                expected_category=sample["expected_category"],
+                actual_category=a.category.value,
+                category_correct=a.category.value == sample["expected_category"],
+                expected_theme=sample["expected_theme"],
                 actual_theme=a.theme,
-                theme_correct=_theme_matches(a.theme, sample["theme_keywords"]),
                 mode=outcome.mode,
                 latency_ms=outcome.latency_ms,
             )
@@ -66,8 +70,8 @@ def summarize(results: list[EvalResult]) -> dict:
         "total": n,
         "sentiment_accuracy": round(100 * sum(r.sentiment_correct for r in results) / n, 1),
         "actionable_accuracy": round(100 * sum(r.actionable_correct for r in results) / n, 1),
-        "theme_accuracy": round(100 * sum(r.theme_correct for r in results) / n, 1),
+        "category_accuracy": round(100 * sum(r.category_correct for r in results) / n, 1),
         "all_three_correct": round(
-            100 * sum(r.sentiment_correct and r.actionable_correct and r.theme_correct for r in results) / n, 1
+            100 * sum(r.sentiment_correct and r.actionable_correct and r.category_correct for r in results) / n, 1
         ),
     }

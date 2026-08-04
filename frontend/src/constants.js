@@ -1,23 +1,22 @@
 export const CATEGORIES = [
-  "Billing",
-  "Technical Issue",
+  "Order Issue",
+  "Payments & Refunds",
+  "Returns & Replacements",
+  "Product Quality & Safety",
+  "App/Website Issue",
   "Account Access",
-  "Bug Report",
-  "Feature Request",
-  "Complaint",
-  "Security Concern",
+  "Seller/Vendor Issue",
   "General Inquiry",
 ];
 
 export const PRIORITIES = ["High", "Medium", "Low"];
 
 export const TEAMS = [
-  "Billing Support",
-  "Technical Support",
-  "Engineering",
-  "Account Management",
-  "Product Team",
-  "Security Team",
-  "Customer Success",
   "Triage",
+  "Order & Delivery Team",
+  "Returns & Refunds Team",
+  "Payments & Billing Team",
+  "Product Quality Team",
+  "Technical Support Team",
+  "Account & Loyalty Team",
 ];
