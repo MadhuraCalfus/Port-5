@@ -4,10 +4,11 @@ import { CheckCircle2, Loader2, Receipt, Search, ShoppingBag, Trash2, Wand2 } fr
 import { api } from "../../../api";
 import { Button, Card, SlideOver } from "../../../components/primitives";
 import { formatInr, ProductCard } from "./NykaaProductCard";
+import { NykaaProductDetailPage } from "./NykaaProductDetailPage";
 import { NykaaOrdersPage } from "./NykaaOrdersPage";
 import { NykaaBeautyProfilePage } from "./NykaaBeautyProfilePage";
 import { NykaaAppFeedbackWidget } from "./NykaaAppFeedbackWidget";
-import { PendingSurveyNudge } from "../../../components/PendingSurveyNudge";
+import { NykaaHeroSlider } from "./NykaaHeroSlider";
 
 export { formatInr };
 
@@ -68,6 +69,7 @@ export function NykaaCatalogPage() {
   const [placing, setPlacing] = useState(false);
   const [placedOrder, setPlacedOrder] = useState(null);
   const [error, setError] = useState(null);
+  const [openProduct, setOpenProduct] = useState(null);
 
   // Only one drawer open at a time — they're all right-anchored at the same
   // z-index, so stacking two would just overlap.
@@ -161,6 +163,10 @@ export function NykaaCatalogPage() {
 
   return (
     <div>
+      <div className="mb-4">
+        <NykaaHeroSlider />
+      </div>
+
       {placedOrder && (
         <Card className="mx-auto mb-4 max-w-lg p-6 text-center">
           <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
@@ -207,7 +213,7 @@ export function NykaaCatalogPage() {
               onClick={openBeauty}
               className="inline-flex items-center gap-1.5 rounded-lg bg-black/5 dark:bg-white/10 px-3 py-2 text-xs font-medium text-ink/70 dark:text-ink-dark/70 hover:bg-black/10 dark:hover:bg-white/15"
             >
-              <Wand2 size={15} /> Beauty Profile
+              <Wand2 size={15} /> Beauty Portfolio
             </button>
             <button
               onClick={openOrders}
@@ -256,7 +262,7 @@ export function NykaaCatalogPage() {
       </Card>
 
       <div className="mt-4 grid items-start gap-4 lg:grid-cols-[15rem_1fr]">
-        <Card className="hidden h-fit max-h-[calc(100vh-8rem)] space-y-4 overflow-y-auto thin-scroll p-4 lg:block">
+        <Card className="hidden h-fit max-h-[calc(100vh-8rem)] space-y-4 overflow-y-auto overscroll-contain thin-scroll p-4 lg:block">
           <SidebarSection
             title="Subcategory"
             options={subcategories}
@@ -266,22 +272,34 @@ export function NykaaCatalogPage() {
           <SidebarSection title="Brand" options={brands} selected={brandFilter} onSelect={setBrandFilter} />
         </Card>
 
-        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {products.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              quantity={quantities[product.id] ?? 1}
-              onQuantityChange={(q) => setQuantities((prev) => ({ ...prev, [product.id]: q }))}
-              onAdd={(q) => addToCart(product, q)}
-            />
-          ))}
-          {!loading && products.length === 0 && (
-            <p className="col-span-full py-10 text-center text-sm text-ink/50 dark:text-ink-dark/50">
-              No products match your filters.
-            </p>
-          )}
-        </div>
+        {openProduct ? (
+          <NykaaProductDetailPage
+            key={openProduct.id}
+            product={openProduct}
+            onBack={() => setOpenProduct(null)}
+            onAddToCart={addToCart}
+            onOpenProduct={setOpenProduct}
+          />
+        ) : (
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {products.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                quantity={quantities[product.id] ?? 1}
+                onQuantityChange={(q) => setQuantities((prev) => ({ ...prev, [product.id]: q }))}
+                onAdd={(q) => addToCart(product, q)}
+                onAddProduct={addToCart}
+                onOpenDetail={setOpenProduct}
+              />
+            ))}
+            {!loading && products.length === 0 && (
+              <p className="col-span-full py-10 text-center text-sm text-ink/50 dark:text-ink-dark/50">
+                No products match your filters.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {cartOpen && (
@@ -337,7 +355,6 @@ export function NykaaCatalogPage() {
       )}
 
       <NykaaAppFeedbackWidget />
-      <PendingSurveyNudge />
     </div>
   );
 }

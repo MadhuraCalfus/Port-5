@@ -8,7 +8,7 @@ import clsx from "clsx";
 export function MegaTabs({ tabs, value, onChange }) {
   return (
     <div className="border-b border-black/8 dark:border-white/10 bg-black/[0.015] dark:bg-white/[0.02]">
-      <div className="mx-auto flex max-w-6xl gap-1 px-4 py-2">
+      <div className="container-app flex gap-1 px-4 py-2">
         {tabs.map(({ id, label, badge }) => (
           <button
             key={id}

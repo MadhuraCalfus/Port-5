@@ -541,8 +541,12 @@ def get_ticket_attachment(ticket_id: int, comment_id: int, claims: dict = Depend
 
 
 @app.get("/api/analytics")
-def get_analytics(claims: dict = Depends(auth.require_admin)):
-    return analytics.compute_analytics()
+def get_analytics(
+    period_type: str | None = None,
+    period_key: str | None = None,
+    claims: dict = Depends(auth.require_admin),
+):
+    return analytics.compute_analytics(period_type, period_key)
 
 
 @app.get("/api/sample-tickets")
@@ -800,11 +804,14 @@ def pm_list_surveys(claims: dict = Depends(auth.require_pm)):
 
 
 @app.get("/api/pm/surveys/overview")
-def pm_surveys_overview(claims: dict = Depends(auth.require_pm)):
+def pm_surveys_overview(period_type: str | None = None, period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
     """Rolled up across every SENT survey — how many distinct customers
     have responded at all, response volume per survey, and one pooled
     positive/neutral/negative read, for the "All Surveys" view on Survey
-    Analytics rather than one survey at a time."""
+    Analytics rather than one survey at a time. period_type/period_key (both
+    None means all-time) scope this to responses submitted in that window,
+    same convention as the Admin dashboard's Weekly/Monthly/Yearly toggle
+    (see analytics._within_period)."""
     surveys = [s for s in store.list_custom_surveys() if s["status"] == "sent"]
     per_survey = []
     type_counts = Counter()
@@ -813,7 +820,7 @@ def pm_surveys_overview(claims: dict = Depends(auth.require_pm)):
     respondents: set[int] = set()
     total_responses = 0
     for s in surveys:
-        responses = store.list_survey_responses(s["id"])
+        responses = analytics._within_period(store.list_survey_responses(s["id"]), period_type, period_key)
         total_responses += len(responses)
         for r in responses:
             respondents.add(r["user_id"])
@@ -855,14 +862,18 @@ def pm_send_survey(survey_id: int, claims: dict = Depends(auth.require_pm)):
 
 
 @app.get("/api/pm/surveys/{survey_id}/results")
-def pm_survey_results(survey_id: int, claims: dict = Depends(auth.require_pm)):
+def pm_survey_results(
+    survey_id: int, period_type: str | None = None, period_key: str | None = None, claims: dict = Depends(auth.require_pm)
+):
     """Per-question answer-count distribution across the scale plus an
     average — pure arithmetic over already-collected responses, same spirit
-    as insights.py's aggregation (no LLM involved)."""
+    as insights.py's aggregation (no LLM involved). period_type/period_key
+    scope this to responses submitted in that window, same as the overview
+    endpoint above."""
     survey = store.get_custom_survey(survey_id)
     if not survey:
         raise HTTPException(status_code=404, detail="survey not found")
-    responses = store.list_survey_responses(survey_id)
+    responses = analytics._within_period(store.list_survey_responses(survey_id), period_type, period_key)
 
     questions = []
     all_values = []

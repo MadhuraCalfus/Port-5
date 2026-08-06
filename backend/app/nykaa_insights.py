@@ -66,15 +66,17 @@ def generate_brand_report(period_type: str, period_key: str | None = None) -> di
     return result
 
 
-def overview() -> dict:
+def overview(period_type: str | None = None, period_key: str | None = None) -> dict:
     """Headline numbers for the PM's Nykaa Pulse Overview sub-tab: order
     volume + GMV, delivery satisfaction, review conversion, time-to-
     moderation, and photo-attach rate — the order/catalog-level metrics
     insights.py has no visibility into, alongside a quick sentiment read
-    over Nykaa Pulse reviews specifically (not the whole app's feedback)."""
-    catalog = npstore.compute_catalog_overview()
-    funnel = npstore.compute_order_funnel()
-    review_rows = npstore.list_review_feedback_with_catalog()
+    over Nykaa Pulse reviews specifically (not the whole app's feedback).
+    period_type/period_key (both None means all-time) scope every figure
+    to the same period."""
+    catalog = npstore.compute_catalog_overview(period_type, period_key)
+    funnel = npstore.compute_order_funnel(period_type, period_key)
+    review_rows = npstore.list_review_feedback_with_catalog(period_type, period_key)
 
     total = funnel["total_items"] or 0
     sentiment_counts = {"positive": 0, "neutral": 0, "negative": 0}

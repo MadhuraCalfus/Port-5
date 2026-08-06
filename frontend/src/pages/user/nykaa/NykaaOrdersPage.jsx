@@ -3,6 +3,7 @@ import { AlertTriangle, ImagePlus, Loader2, MessageCircle, RefreshCw, Send, Shie
 import { api } from "../../../api";
 import { Button, Card, Modal } from "../../../components/primitives";
 import { StarInput, TicketChatModal } from "./NykaaTicketChat";
+import { ProductImage } from "./NykaaProductCard";
 
 const MAX_REVIEW_PHOTO_BYTES = 5 * 1024 * 1024;
 
@@ -268,7 +269,9 @@ function FeedbackModal({ order, item, onClose, onChanged, onReviewSubmitted }) {
   return (
     <Modal title="Rate & Review" onClose={onClose}>
       <div className="flex gap-3 border-b border-black/5 dark:border-white/10 pb-4">
-        <div className="grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-brand/10 text-2xl">💄</div>
+        <div className="w-16 shrink-0">
+          <ProductImage categoryName={product?.category_name} size="h-16" />
+        </div>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-ink dark:text-ink-dark">{item.product_name}</p>
           <p className="mt-0.5 line-clamp-2 text-xs text-ink/60 dark:text-ink-dark/60">

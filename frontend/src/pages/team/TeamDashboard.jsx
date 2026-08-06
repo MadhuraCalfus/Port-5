@@ -1,18 +1,13 @@
 import { useEffect, useState } from "react";
-import { Sparkles, Table2 } from "lucide-react";
+import { Table2 } from "lucide-react";
 import { api } from "../../api";
 import { useAuth } from "../../auth/AuthContext";
-import { useTheme } from "../../hooks/useTheme";
 import { Header } from "../../components/Header";
 import { MegaTabs } from "../../components/MegaTabs";
 import { TeamTicketsPage } from "./TeamTicketsPage";
 import { NykaaTeamOrderTicketsPage } from "./nykaa/NykaaTeamOrderTicketsPage";
-import { NykaaAiResolvedPage } from "../../components/NykaaAiResolvedPage";
 
-const NYKAA_TABS = [
-  { id: "tickets", label: "Tickets", icon: Table2 },
-  { id: "ai-resolved", label: "AI Resolved", icon: Sparkles },
-];
+const NYKAA_TABS = [{ id: "tickets", label: "Tickets", icon: Table2 }];
 
 export function TeamDashboard() {
   const [megaTab, setMegaTab] = useState("tickets");
@@ -22,7 +17,6 @@ export function TeamDashboard() {
   // opening the Tickets sub-tab. Fetched once on load, same as everything
   // else in this app (nothing pushes in real time anywhere today).
   const [nykaaUnread, setNykaaUnread] = useState(0);
-  const { theme, toggle } = useTheme();
   const { auth, logout } = useAuth();
 
   useEffect(() => {
@@ -43,8 +37,8 @@ export function TeamDashboard() {
 
       {megaTab === "tickets" && (
         <>
-          <Header theme={theme} onToggleTheme={toggle} userLabel={`${auth.name} · ${auth.team} team`} onLogout={logout} />
-          <main className="mx-auto max-w-6xl px-4 py-8">
+          <Header userName={auth.name} roleLabel={`${auth.team} team`} onLogout={logout} />
+          <main className="container-app px-4 py-8">
             <TeamTicketsPage />
           </main>
         </>
@@ -56,15 +50,13 @@ export function TeamDashboard() {
             tabs={NYKAA_TABS}
             tab={nykaaTab}
             onTab={setNykaaTab}
-            theme={theme}
-            onToggleTheme={toggle}
-            userLabel={`${auth.name} · ${auth.team} team`}
+            userName={auth.name}
+            roleLabel={`${auth.team} team`}
             onLogout={logout}
           />
-          <main className="mx-auto max-w-6xl px-4 py-8">
+          <main className="container-app px-4 py-8">
             <div>
               {nykaaTab === "tickets" && <NykaaTeamOrderTicketsPage />}
-              {nykaaTab === "ai-resolved" && <NykaaAiResolvedPage />}
             </div>
           </main>
         </>

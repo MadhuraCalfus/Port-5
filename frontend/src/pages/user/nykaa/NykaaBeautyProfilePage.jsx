@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { api } from "../../../api";
 import { Button, Card } from "../../../components/primitives";
 import { ProductCard } from "./NykaaProductCard";
+import { NykaaProductDetailPage } from "./NykaaProductDetailPage";
 
 const SECTIONS = ["Skin", "Hair", "Makeup"];
 
@@ -203,7 +204,7 @@ function BeautyWizard({ answers, setAnswers, confirmedSections, setConfirmedSect
           <Sparkles size={16} />
         </span>
         <div>
-          <h2 className="font-display text-base font-semibold text-ink dark:text-ink-dark">My Beauty Profile</h2>
+          <h2 className="font-display text-base font-semibold text-ink dark:text-ink-dark">My Beauty Portfolio</h2>
           <p className="text-xs text-ink/50 dark:text-ink-dark/50">
             Tell us a bit about yourself so other shoppers can see reviews from people like them.
           </p>
@@ -291,12 +292,28 @@ const REC_TABS = [
   { key: "makeup", label: "Makeup" },
 ];
 
-function RecommendedProducts({ onAddToCart }) {
+// Preset price buckets for the budget filter below — a plain client-side
+// filter over whichever tab's recommendations are already loaded, not a
+// separate profile-matched section.
+const BUDGET_BUCKETS = [
+  { key: "under500", label: "Under ₹500", test: (p) => p.price_inr < 500 },
+  { key: "500to1000", label: "₹500 – ₹1,000", test: (p) => p.price_inr >= 500 && p.price_inr <= 1000 },
+  { key: "1000to2000", label: "₹1,000 – ₹2,000", test: (p) => p.price_inr > 1000 && p.price_inr <= 2000 },
+  { key: "above2000", label: "Above ₹2,000", test: (p) => p.price_inr > 2000 },
+];
+
+function RecommendedProducts({ onAddToCart, onOpenDetail }) {
   const [activeTab, setActiveTab] = useState("skin");
   const [cache, setCache] = useState({});
   const [loadingTab, setLoadingTab] = useState(null);
   const [error, setError] = useState(null);
   const [quantities, setQuantities] = useState({});
+  // No bucket selected by default — the budget row is an optional narrowing
+  // filter on top of the tab's recommendations, not a replacement for them.
+  const [budgetBucket, setBudgetBucket] = useState(null);
+  const [customMin, setCustomMin] = useState("");
+  const [customMax, setCustomMax] = useState("");
+  const [customRange, setCustomRange] = useState(null);
 
   useEffect(() => {
     if (cache[activeTab]) return;
@@ -311,10 +328,37 @@ function RecommendedProducts({ onAddToCart }) {
   }, [activeTab]);
 
   const products = cache[activeTab];
+  const budgetTest = customRange
+    ? (p) => p.price_inr >= customRange.min && p.price_inr <= customRange.max
+    : BUDGET_BUCKETS.find((b) => b.key === budgetBucket)?.test;
+  const visibleProducts = budgetTest ? products?.filter(budgetTest) : products;
+
+  function pickBucket(key) {
+    setBudgetBucket((prev) => (prev === key ? null : key));
+    setCustomRange(null);
+    setCustomMin("");
+    setCustomMax("");
+  }
+
+  function applyCustomRange(e) {
+    e.preventDefault();
+    const min = Number(customMin) || 0;
+    const max = customMax.trim() ? Number(customMax) : Infinity;
+    if (max < min) return;
+    setBudgetBucket(null);
+    setCustomRange({ min, max });
+  }
+
+  function clearBudget() {
+    setBudgetBucket(null);
+    setCustomRange(null);
+    setCustomMin("");
+    setCustomMax("");
+  }
 
   return (
     <div>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {REC_TABS.map((t) => (
           <button
             key={t.key}
@@ -332,6 +376,54 @@ function RecommendedProducts({ onAddToCart }) {
         ))}
       </div>
 
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] text-ink/50 dark:text-ink-dark/50">Budget:</span>
+        {BUDGET_BUCKETS.map((b) => (
+          <button
+            key={b.key}
+            type="button"
+            onClick={() => pickBucket(b.key)}
+            className={clsx(
+              "rounded-full px-3 py-1 text-[11px] font-medium transition",
+              !customRange && budgetBucket === b.key
+                ? "bg-brand/15 text-brand dark:text-brand-dim ring-1 ring-brand/30"
+                : "bg-black/5 dark:bg-white/10 text-ink/60 dark:text-ink-dark/60 hover:bg-black/10 dark:hover:bg-white/15",
+            )}
+          >
+            {b.label}
+          </button>
+        ))}
+        <form onSubmit={applyCustomRange} className="flex flex-wrap items-center gap-1.5">
+          <input
+            type="number"
+            min={0}
+            inputMode="numeric"
+            value={customMin}
+            onChange={(e) => setCustomMin(e.target.value)}
+            placeholder="Min ₹"
+            className="w-20 rounded-lg border border-black/10 dark:border-white/15 bg-transparent px-2 py-1 text-[11px] text-ink dark:text-ink-dark placeholder:text-ink/40 dark:placeholder:text-ink-dark/40 outline-none focus:border-brand/60"
+          />
+          <span className="text-ink/30 dark:text-ink-dark/30">–</span>
+          <input
+            type="number"
+            min={0}
+            inputMode="numeric"
+            value={customMax}
+            onChange={(e) => setCustomMax(e.target.value)}
+            placeholder="Max ₹"
+            className="w-20 rounded-lg border border-black/10 dark:border-white/15 bg-transparent px-2 py-1 text-[11px] text-ink dark:text-ink-dark placeholder:text-ink/40 dark:placeholder:text-ink-dark/40 outline-none focus:border-brand/60"
+          />
+          <Button type="submit" className="px-2.5 py-1 text-[11px]" disabled={!customMin && !customMax}>
+            Apply
+          </Button>
+        </form>
+        {(budgetBucket || customRange) && (
+          <button type="button" onClick={clearBudget} className="text-[11px] font-medium text-ink/50 dark:text-ink-dark/50 hover:underline">
+            Clear
+          </button>
+        )}
+      </div>
+
       <div className="mt-3">
         {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
         {!error && loadingTab === activeTab && (
@@ -339,18 +431,22 @@ function RecommendedProducts({ onAddToCart }) {
             <Loader2 size={12} className="animate-spin" /> Finding products for you...
           </p>
         )}
-        {!error && loadingTab !== activeTab && products?.length === 0 && (
-          <p className="text-xs text-ink/50 dark:text-ink-dark/50">No recommendations yet.</p>
+        {!error && loadingTab !== activeTab && visibleProducts?.length === 0 && (
+          <p className="text-xs text-ink/50 dark:text-ink-dark/50">
+            {products?.length ? "No recommendations in this price range." : "No recommendations yet."}
+          </p>
         )}
-        {!error && products && products.length > 0 && (
-          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {products.map((p) => (
+        {!error && visibleProducts && visibleProducts.length > 0 && (
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
+            {visibleProducts.map((p) => (
               <ProductCard
                 key={p.id}
                 product={p}
                 quantity={quantities[p.id] ?? 1}
                 onQuantityChange={(q) => setQuantities((prev) => ({ ...prev, [p.id]: q }))}
                 onAdd={(q) => onAddToCart?.(p, q)}
+                onAddProduct={onAddToCart}
+                onOpenDetail={onOpenDetail}
               />
             ))}
           </div>
@@ -365,7 +461,7 @@ function RecommendedProducts({ onAddToCart }) {
 // nykaa_ai_features.generate_beauty_routine) as a full ProductCard, so a
 // customer can inspect it (reviews, "what customers say") and add it to
 // their cart directly from the routine, not just read its name.
-function RoutineStepCard({ step, index, product, quantity, onQuantityChange, onAdd }) {
+function RoutineStepCard({ step, index, product, quantity, onQuantityChange, onAdd, onAddProduct, onOpenDetail }) {
   return (
     <div>
       <div className="mb-2 flex items-start gap-2.5">
@@ -378,7 +474,14 @@ function RoutineStepCard({ step, index, product, quantity, onQuantityChange, onA
         </div>
       </div>
       {product ? (
-        <ProductCard product={product} quantity={quantity} onQuantityChange={onQuantityChange} onAdd={onAdd} />
+        <ProductCard
+          product={product}
+          quantity={quantity}
+          onQuantityChange={onQuantityChange}
+          onAdd={onAdd}
+          onAddProduct={onAddProduct}
+          onOpenDetail={onOpenDetail}
+        />
       ) : (
         <Card className="flex items-center justify-center gap-2 p-6 text-xs text-ink/50 dark:text-ink-dark/50">
           <Loader2 size={13} className="animate-spin" /> Loading product...
@@ -393,7 +496,7 @@ const ROUTINE_TABS = [
   { key: "haircare_routine", label: "Haircare" },
 ];
 
-function RoutineGenerator({ onAddToCart }) {
+function RoutineGenerator({ onAddToCart, onOpenDetail }) {
   const [routine, setRoutine] = useState(null);
   const [products, setProducts] = useState({});
   const [activeTab, setActiveTab] = useState("skincare_routine");
@@ -432,7 +535,7 @@ function RoutineGenerator({ onAddToCart }) {
         </div>
         <Button onClick={generate} disabled={loading} className="px-4 py-2 text-xs">
           {loading ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
-          {loading ? "Building your routine..." : "✨ Generate My Routine"}
+          {loading ? "Building your routine..." : "Generate My Routine"}
         </Button>
       </div>
 
@@ -464,7 +567,7 @@ function RoutineGenerator({ onAddToCart }) {
             ))}
           </div>
 
-          <div className="mt-4 grid grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-4 grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
             {activeSteps.map((s, i) => (
               <RoutineStepCard
                 key={s.step}
@@ -474,6 +577,8 @@ function RoutineGenerator({ onAddToCart }) {
                 quantity={quantities[s.product_id] ?? 1}
                 onQuantityChange={(q) => setQuantities((prev) => ({ ...prev, [s.product_id]: q }))}
                 onAdd={(q) => onAddToCart?.(products[s.product_id], q)}
+                onAddProduct={onAddToCart}
+                onOpenDetail={onOpenDetail}
               />
             ))}
           </div>
@@ -503,6 +608,7 @@ export function NykaaBeautyProfilePage({ onAddToCart }) {
   const [updatedAt, setUpdatedAt] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  const [openProduct, setOpenProduct] = useState(null);
 
   useEffect(() => {
     // StrictMode double-mounts this effect in dev — without the `cancelled`
@@ -573,6 +679,18 @@ export function NykaaBeautyProfilePage({ onAddToCart }) {
     );
   }
 
+  if (openProduct) {
+    return (
+      <NykaaProductDetailPage
+        key={openProduct.id}
+        product={openProduct}
+        onBack={() => setOpenProduct(null)}
+        onAddToCart={onAddToCart}
+        onOpenProduct={setOpenProduct}
+      />
+    );
+  }
+
   const allConfirmed = SECTIONS.every((s) => confirmedSections[s]);
 
   return (
@@ -599,7 +717,7 @@ export function NykaaBeautyProfilePage({ onAddToCart }) {
 
       {allConfirmed && (
         <Card className="mx-auto mt-4 max-w-xl p-5">
-          <h3 className="text-sm font-semibold text-ink dark:text-ink-dark">Your Beauty Profile, at a glance</h3>
+          <h3 className="text-sm font-semibold text-ink dark:text-ink-dark">Your Beauty Portfolio, at a glance</h3>
           <dl className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
             {SECTIONS.flatMap((s) => SECTION_QUESTIONS[s]).map((q) => (
               <div key={q.key}>
@@ -618,13 +736,13 @@ export function NykaaBeautyProfilePage({ onAddToCart }) {
         <div className="mx-auto mt-6 max-w-6xl">
           <h2 className="font-display text-base font-semibold text-ink dark:text-ink-dark">Recommended for you</h2>
           <div className="mt-3">
-            <RecommendedProducts onAddToCart={onAddToCart} />
+            <RecommendedProducts onAddToCart={onAddToCart} onOpenDetail={setOpenProduct} />
           </div>
         </div>
       )}
 
       <div className="mx-auto max-w-6xl">
-        <RoutineGenerator onAddToCart={onAddToCart} />
+        <RoutineGenerator onAddToCart={onAddToCart} onOpenDetail={setOpenProduct} />
       </div>
     </div>
   );

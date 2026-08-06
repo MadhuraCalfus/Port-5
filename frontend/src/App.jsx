@@ -1,7 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { RequireRole } from "./auth/RequireRole";
-import { WelcomePage } from "./pages/WelcomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { SignupPage } from "./pages/SignupPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
@@ -13,14 +12,13 @@ import { PmDashboard } from "./pages/pm/PmDashboard";
 
 function HomeRedirect() {
   const { auth } = useAuth();
-  if (!auth) return <Navigate to="/welcome" replace />;
+  if (!auth) return <Navigate to="/login" replace />;
   return <Navigate to={`/${auth.role}`} replace />;
 }
 
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/welcome" element={<WelcomePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />

@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { KeyRound, Moon, Sun } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import { api } from "../api";
-import { useTheme } from "../hooks/useTheme";
 import { AuthFloatingIcons } from "../components/AuthFloatingIcons";
+import { BrandMark } from "../components/BrandMark";
 import { Button, Card } from "../components/primitives";
 
 export function ResetPasswordPage() {
-  const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") ?? "";
@@ -34,18 +33,11 @@ export function ResetPasswordPage() {
     <div className="auth-backdrop relative flex min-h-screen items-center justify-center overflow-hidden px-4">
       <AuthFloatingIcons />
       <Card className="relative z-10 w-full max-w-sm p-6">
-        <div className="mb-5 flex items-center justify-between">
+        <div className="mb-5 flex items-center justify-center">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white">💄</span>
+            <BrandMark />
             <h1 className="font-display text-lg font-semibold text-ink dark:text-ink-dark">NykaaPulse</h1>
           </div>
-          <button
-            onClick={toggle}
-            className="grid h-8 w-8 place-items-center rounded-lg text-ink/60 dark:text-ink-dark/60 hover:bg-black/5 dark:hover:bg-white/10"
-            aria-label="Toggle theme"
-          >
-            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
         </div>
 
         <h2 className="text-base font-semibold text-ink dark:text-ink-dark">Set a new password</h2>

@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import clsx from "clsx";
-import { LineChart, LogIn, Moon, Shield, Sun, User, Users } from "lucide-react";
+import { LineChart, LogIn, Shield, User, Users } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
-import { useTheme } from "../hooks/useTheme";
 import { AuthFloatingIcons } from "../components/AuthFloatingIcons";
+import { BrandMark } from "../components/BrandMark";
 import { Button, Card } from "../components/primitives";
 import { NykaaAppFeedbackWidget } from "./user/nykaa/NykaaAppFeedbackWidget";
 
@@ -17,13 +17,11 @@ const ROLE_TABS = [
 
 export function LoginPage() {
   const { login, logout } = useAuth();
-  const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  // A ?role= query param (set by WelcomePage's cards) locks this screen to
-  // that one role's login form — no switcher shown, so clicking "Customer"
-  // on Welcome can never land you on Team/Admin/PM/Dev. Direct/bookmarked
-  // /login visits (no ?role=) fall back to the full switcher below.
+  // An optional ?role= query param locks this screen to that one role's
+  // login form — no switcher shown. Plain /login visits (no ?role=, the
+  // only entry point now) fall back to the full switcher below.
   const lockedRole = ROLE_TABS.find((r) => r.id === searchParams.get("role"));
   const [roleTab, setRoleTab] = useState(() => lockedRole?.id ?? "user");
   const [email, setEmail] = useState("");
@@ -57,18 +55,11 @@ export function LoginPage() {
     <div className="auth-backdrop relative flex min-h-screen items-center justify-center overflow-hidden px-4">
       <AuthFloatingIcons />
       <Card className="relative z-10 w-full max-w-sm p-6">
-        <div className="mb-5 flex items-center justify-between">
+        <div className="mb-5 flex items-center justify-center">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white">💄</span>
+            <BrandMark />
             <h1 className="font-display text-lg font-semibold text-ink dark:text-ink-dark">NykaaPulse</h1>
           </div>
-          <button
-            onClick={toggle}
-            className="grid h-8 w-8 place-items-center rounded-lg text-ink/60 dark:text-ink-dark/60 hover:bg-black/5 dark:hover:bg-white/10"
-            aria-label="Toggle theme"
-          >
-            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
         </div>
 
         {!lockedRole && (
@@ -141,7 +132,7 @@ export function LoginPage() {
         {lockedRole && (
           <p className="mt-4 text-center text-xs text-ink/40 dark:text-ink-dark/40">
             Not {active.label.toLowerCase()}?{" "}
-            <Link to="/welcome" className="font-medium text-brand dark:text-brand-dim hover:underline">
+            <Link to="/login" className="font-medium text-brand dark:text-brand-dim hover:underline">
               Choose a different role
             </Link>
           </p>

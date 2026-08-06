@@ -2,6 +2,7 @@
 from collections import Counter
 
 from . import store
+from .insights import _period_bounds
 
 
 def _bucket(rows: list[dict], field: str) -> dict[str, int]:
@@ -18,10 +19,21 @@ def _timeline(rows: list[dict]) -> list[dict]:
     return [{"date": date, "count": counts[date]} for date in sorted(counts)]
 
 
-def compute_analytics() -> dict:
-    rows = store.list_tickets(limit=100000, offset=0)
+def _within_period(rows: list[dict], period_type: str | None, period_key: str | None) -> list[dict]:
+    """Both None (the default) means all-time, unchanged from before this
+    filter existed — a period is only applied when the Admin dashboard's
+    Weekly/Monthly/Yearly toggle actually picks one."""
+    if not period_type or not period_key:
+        return rows
+    start, end = _period_bounds(period_type, period_key)
+    return [r for r in rows if r.get("created_at") and start <= r["created_at"][:10] <= end]
+
+
+def compute_analytics(period_type: str | None = None, period_key: str | None = None) -> dict:
+    rows = _within_period(store.list_tickets(limit=100000, offset=0), period_type, period_key)
+    self_resolved_rows = _within_period(store.list_self_resolved(limit=100000, offset=0), period_type, period_key)
     total = len(rows)
-    self_resolved_count = store.count_self_resolved()
+    self_resolved_count = len(self_resolved_rows)
 
     if total == 0:
         return {

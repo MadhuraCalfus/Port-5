@@ -362,7 +362,7 @@ def _fallback_chat_turn(new_message: str) -> dict:
     b = baseline.classify(new_message)
     return {
         "reply": "Let me connect you with our support team so they can look into this properly.",
-        "escalate": True,
+        "escalated": True,
         "category": b.category.value,
         "priority": b.priority.value,
         "team": b.team.value,
@@ -440,7 +440,7 @@ def run_chat_turn(history: list[dict], new_message: str, context: str | None = N
     latency_ms = int((time.monotonic() - start) * 1000)
     return {
         "reply": data["reply"],
-        "escalate": data["escalate"],
+        "escalated": data["escalate"],
         "category": data["category"] or None,
         "priority": data["priority"] or None,
         "team": data["team"] or None,

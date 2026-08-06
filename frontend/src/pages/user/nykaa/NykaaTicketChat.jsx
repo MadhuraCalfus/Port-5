@@ -186,12 +186,11 @@ export function useTicketChat({ order, item, onTicketRaised }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Manual "Sync" — re-fetches whichever side of the conversation is
-  // currently showing (the persisted bot-phase transcript, or the ticket
-  // thread once escalated) so a customer/agent who's been idle for a while
-  // — or has this chat open on another tab/device — can pull in whatever
-  // the other side has sent since it last loaded, without closing and
-  // reopening.
+  // Re-fetches whichever side of the conversation is currently showing (the
+  // persisted bot-phase transcript, or the ticket thread once escalated) so
+  // a customer/agent who's been idle for a while — or has this chat open on
+  // another tab/device — can pull in whatever the other side has sent since
+  // it last loaded.
   async function sync() {
     if (syncing) return;
     setSyncing(true);
@@ -206,6 +205,16 @@ export function useTicketChat({ order, item, onTicketRaised }) {
       setSyncing(false);
     }
   }
+
+  // Auto-sync — once a ticket is escalated (waiting for pickup, or already
+  // being worked by a team member), poll for updates in the background
+  // instead of making the customer click a Sync button.
+  useEffect(() => {
+    if (phase !== "escalated") return;
+    const id = setInterval(sync, 8000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -326,7 +335,6 @@ export function TicketChatBody({ order, item, chat }) {
     sending,
     uploading,
     syncing,
-    sync,
     error,
     send,
     uploadAttachment,
@@ -350,17 +358,13 @@ export function TicketChatBody({ order, item, chat }) {
 
   return (
     <>
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={sync}
-          disabled={syncing}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-40"
-        >
-          <RefreshCw size={12} className={syncing ? "animate-spin" : ""} /> Sync
-        </button>
-      </div>
-      <div className="thin-scroll flex max-h-[420px] min-h-[200px] flex-col gap-3 overflow-y-auto pr-1">
+      {phase === "escalated" && (
+        <div className="flex items-center justify-end gap-1.5 px-2 py-1 text-[11px] text-ink/40 dark:text-ink-dark/40">
+          <RefreshCw size={11} className={syncing ? "animate-spin" : ""} />
+          {syncing ? "Checking for updates..." : "Auto-syncing"}
+        </div>
+      )}
+      <div className="thin-scroll flex max-h-[420px] min-h-[200px] flex-col gap-3 overflow-y-auto overscroll-contain pr-1">
         <ChatContextCard order={order} item={item} />
 
         {phase === "chat" ? (

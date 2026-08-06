@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { api } from "../../../api";
 import { Card } from "../../../components/primitives";
+import { NykaaPeriodDateControls, NykaaPeriodTypeToggle, useNykaaPeriodFilter } from "../../../components/NykaaPeriodToggle";
 
 function formatInr(amount) {
   return `₹${Number(amount).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -63,12 +64,13 @@ export function NykaaPulseOverviewPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const picker = useNykaaPeriodFilter("all");
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      setData(await api.nykaaPmOverview());
+      setData(await api.nykaaPmOverview(picker.isAllTime ? undefined : picker.periodType, picker.periodKey));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -78,7 +80,8 @@ export function NykaaPulseOverviewPage() {
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picker.periodType, picker.periodKey]);
 
   const sentimentData = data
     ? SENTIMENT_ORDER.filter((k) => data.review_sentiment[k] != null).map((k) => ({ name: k, value: data.review_sentiment[k] }))
@@ -91,12 +94,24 @@ export function NykaaPulseOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-display text-lg font-semibold">Overview</h2>
-        <p className="mt-1 text-sm text-ink/60 dark:text-ink-dark/60">
-          Order volume, review conversion, and delivery satisfaction — the order/catalog-level view the Mission side's
-          Analytics tab has no visibility into.
-        </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <div>
+          <h2 className="font-display text-lg font-semibold">Overview</h2>
+          <p className="mt-1 text-sm text-ink/60 dark:text-ink-dark/60">
+            Order volume, review conversion, and delivery satisfaction — the order/catalog-level view the Mission side's
+            Analytics tab has no visibility into.
+          </p>
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <NykaaPeriodDateControls picker={picker} />
+          <button
+            onClick={load}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
+          >
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
+          </button>
+          <NykaaPeriodTypeToggle picker={picker} className="ml-auto" />
+        </div>
       </div>
 
       {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{error}</p>}

@@ -18,7 +18,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Re
 from pydantic import BaseModel, Field
 
 from . import auth, classifier, feedback_ai, ticket_report
-from . import nykaa_ai_features, nykaa_analytics, nykaa_insights, nykaa_store as npstore
+from . import nykaa_ai_features, nykaa_analytics, nykaa_chat_sql, nykaa_insights, nykaa_store as npstore
 from .models import Category, Team, TicketStatus
 
 nykaa_router = APIRouter(prefix="/api/nykaa")
@@ -295,6 +295,10 @@ class AskReviewsRequest(BaseModel):
     question: str = Field(min_length=1, max_length=300)
 
 
+class AnalyticsChatRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+
+
 class BeautyProfileRequest(BaseModel):
     """Every field is independently optional — same "no forced format"
     principle as ReviewSubmitRequest. Free-text rather than closed enums so
@@ -374,6 +378,16 @@ def ask_reviews(product_id: int, req: AskReviewsRequest, claims: dict = Depends(
         raise HTTPException(status_code=404, detail="product not found")
     review_texts = npstore.list_published_review_texts(product_id)
     return nykaa_ai_features.answer_review_question(product["name"], review_texts, req.question)
+
+
+@nykaa_router.get("/catalog/products/{product_id}/alternatives")
+def get_product_alternatives(product_id: int, claims: dict = Depends(auth.require_any)):
+    """"Didn't find what you're looking for?" follow-up on the product Q&A
+    panel — other products in the same subcategory, ranked by rating."""
+    product = npstore.get_product(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="product not found")
+    return {"products": npstore.list_alternative_products(product_id)}
 
 
 # ---- customer: Beauty Portfolio ---------------------------------------------
@@ -577,7 +591,7 @@ def chat_turn(
             f"₹{item['unit_price_at_purchase']} each, order status \"{order['status']}\"."
         )
         outcome = nykaa_ai_features.run_chat_turn(history, message, context)
-        if not outcome["escalate"]:
+        if not outcome["escalated"]:
             npstore.add_chat_turn(order_id, item_id, "bot", outcome["reply"])
             return {"reply": outcome["reply"], "escalated": False}
         # run_chat_turn's own escalate path already asked the model for a
@@ -843,8 +857,12 @@ def admin_list_np_tickets(claims: dict = Depends(auth.require_admin)):
 
 
 @nykaa_router.get("/admin/analytics")
-def admin_np_analytics(claims: dict = Depends(auth.require_admin)):
-    return nykaa_analytics.compute_ticket_analytics()
+def admin_np_analytics(
+    period_type: str | None = None,
+    period_key: str | None = None,
+    claims: dict = Depends(auth.require_admin),
+):
+    return nykaa_analytics.compute_ticket_analytics(period_type, period_key)
 
 
 @nykaa_router.get("/admin/tickets/{ticket_id}/report.pdf")
@@ -920,8 +938,8 @@ def team_update_np_ticket_status(ticket_id: int, req: NpTicketStatusUpdateReques
 # ---- PM: catalog-aware analytics (Phase 3) ---------------------------------
 
 @nykaa_router.get("/pm/overview")
-def pm_overview(claims: dict = Depends(auth.require_pm)):
-    return nykaa_insights.overview()
+def pm_overview(period_type: str | None = None, period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
+    return nykaa_insights.overview(period_type, period_key)
 
 
 @nykaa_router.get("/pm/feedback")
@@ -946,17 +964,17 @@ def pm_app_feedback(claims: dict = Depends(auth.require_pm)):
 
 
 @nykaa_router.get("/pm/app-feedback/analytics")
-def pm_app_feedback_analytics(claims: dict = Depends(auth.require_pm)):
+def pm_app_feedback_analytics(period_type: str | None = None, period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
     """Aggregate-only view (rating distribution + category counts) for the
     App Feedback tab — no raw feedback text, just the numbers."""
-    return npstore.compute_app_feedback_breakdown()
+    return npstore.compute_app_feedback_breakdown(period_type, period_key)
 
 
 @nykaa_router.get("/pm/delivery-feedback/analytics")
-def pm_delivery_feedback_analytics(claims: dict = Depends(auth.require_pm)):
+def pm_delivery_feedback_analytics(period_type: str | None = None, period_key: str | None = None, claims: dict = Depends(auth.require_pm)):
     """Aggregate-only view (rating distribution + compliment rate) for the
     Delivery Feedback tab — no raw compliment text, just the numbers."""
-    return npstore.compute_delivery_feedback_breakdown()
+    return npstore.compute_delivery_feedback_breakdown(period_type, period_key)
 
 
 @nykaa_router.get("/pm/brand-breakdown")
@@ -981,3 +999,11 @@ def pm_brand_scorecards(period_type: str = "monthly", period_key: str | None = N
     already shows."""
     brand_rows = nykaa_insights.brand_breakdown(period_type, period_key)
     return {"scorecards": nykaa_ai_features.generate_brand_scorecards(brand_rows)}
+
+
+@nykaa_router.post("/pm/analytics-chat")
+def pm_analytics_chat(req: AnalyticsChatRequest, claims: dict = Depends(auth.require_pm)):
+    """Free-text analytics chatbot over the read-only feedback/review/catalog
+    tables — see nykaa_chat_sql.py for the guardrailed NL -> SQL pipeline
+    and nykaa_chat_chart.py for chart shaping."""
+    return nykaa_chat_sql.ask_question(req.question)

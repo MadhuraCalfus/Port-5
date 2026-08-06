@@ -15,14 +15,15 @@ import {
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
-  Treemap,
   XAxis,
   YAxis,
 } from "recharts";
 import { ArrowLeft, Loader2, RefreshCw, Star } from "lucide-react";
 import { api } from "../../../api";
 import { Card } from "../../../components/primitives";
+import { NykaaPeriodDateControls, NykaaPeriodTypeToggle, useNykaaPeriodFilter } from "../../../components/NykaaPeriodToggle";
 import { yearOptions } from "../../../periodNav";
+import { NykaaAnalyticsChatPanel } from "./NykaaAnalyticsChatPanel";
 
 // A full analyst-style dashboard over the PM's raw Nykaa Pulse feedback list
 // (nykaaPmFeedback — every review, catalog-joined) rather than the fixed
@@ -190,6 +191,7 @@ export function NykaaAnalyticsPage() {
   const [items, setItems] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const picker = useNykaaPeriodFilter("all");
   const [brandFilter, setBrandFilter] = useState("all");
   // Which brand the "Themes within <brand>" chart on the overview is
   // currently showing — independent of brandFilter (the full-page drill-
@@ -224,7 +226,17 @@ export function NykaaAnalyticsPage() {
     load();
   }, []);
 
-  const brandOptions = useMemo(() => (items ? [...new Set(items.map((i) => i.brand).filter(Boolean))].sort() : []), [items]);
+  // Everything below the raw fetch reads periodItems, not items directly —
+  // the page-level period toggle (all brands, categories, and charts) scopes
+  // to whatever period is selected, same as the All Feedback tab's filter.
+  const periodItems = useMemo(() => {
+    if (!items) return [];
+    if (!picker.range) return items;
+    const [start, end] = picker.range;
+    return items.filter((i) => i.created_at && new Date(i.created_at) >= start && new Date(i.created_at) < end);
+  }, [items, picker.range]);
+
+  const brandOptions = useMemo(() => [...new Set(periodItems.map((i) => i.brand).filter(Boolean))].sort(), [periodItems]);
 
   const isOverview = brandFilter === "all";
 
@@ -236,9 +248,8 @@ export function NykaaAnalyticsPage() {
   }, [brandFilter]);
 
   const brandScopedItems = useMemo(() => {
-    if (!items) return [];
-    return isOverview ? items : items.filter((i) => i.brand === brandFilter);
-  }, [items, brandFilter, isOverview]);
+    return isOverview ? periodItems : periodItems.filter((i) => i.brand === brandFilter);
+  }, [periodItems, brandFilter, isOverview]);
 
   const filtered = useMemo(() => {
     if (isOverview || categoryFilter === "all") return brandScopedItems;
@@ -287,7 +298,7 @@ export function NykaaAnalyticsPage() {
   // brand-vs-brand chart on the overview (table, trend lines, diverging bar).
   const brandAgg = useMemo(() => {
     const map = new Map();
-    for (const i of items ?? []) {
+    for (const i of periodItems) {
       if (!i.brand) continue;
       if (!map.has(i.brand)) map.set(i.brand, { brand: i.brand, count: 0, positive: 0, ratedSum: 0, ratedCount: 0, categories: new Map(), themes: new Map() });
       const b = map.get(i.brand);
@@ -320,7 +331,7 @@ export function NykaaAnalyticsPage() {
       topCategory: topOf(b.categories) ?? "—",
       topTheme: topOf(b.themes) ?? "—",
     }));
-  }, [items]);
+  }, [periodItems]);
 
   const topBrandsByVolume = useMemo(
     () => [...brandAgg].sort((a, b) => b.count - a.count).slice(0, 8),
@@ -338,14 +349,14 @@ export function NykaaAnalyticsPage() {
 
   const themesForSelectedBrand = useMemo(() => {
     if (!themesBrand) return [];
-    return aggregateThemes((items ?? []).filter((i) => i.brand === themesBrand));
-  }, [items, themesBrand]);
+    return aggregateThemes(periodItems.filter((i) => i.brand === themesBrand));
+  }, [periodItems, themesBrand]);
 
   const top5BrandNames = useMemo(() => topBrandsByVolume.slice(0, 5).map((b) => b.brand), [topBrandsByVolume]);
   const multiBrandTrendData = useMemo(() => {
     if (top5BrandNames.length === 0) return [];
     const map = new Map();
-    for (const i of items ?? []) {
+    for (const i of periodItems) {
       if (!i.created_at || !top5BrandNames.includes(i.brand)) continue;
       const key = i.created_at.slice(0, 7); // YYYY-MM
       if (!map.has(key)) {
@@ -358,7 +369,7 @@ export function NykaaAnalyticsPage() {
     return [...map.values()]
       .sort((a, b) => a.period.localeCompare(b.period))
       .map((row) => ({ ...row, label: new Date(`${row.period}-01`).toLocaleDateString(undefined, { month: "short", year: "2-digit" }) }));
-  }, [items, top5BrandNames]);
+  }, [periodItems, top5BrandNames]);
 
   // Per-brand average rating for a single selected year (see the year
   // picker on the chart itself) — brand is the X-axis category now, not a
@@ -367,7 +378,7 @@ export function NykaaAnalyticsPage() {
   // same convention as the Products comparison chart).
   const brandRatingByYear = useMemo(() => {
     const map = new Map();
-    for (const i of items ?? []) {
+    for (const i of periodItems) {
       if (!i.created_at || !i.rating || !i.brand) continue;
       if (new Date(i.created_at).getFullYear() !== ratingYear) continue;
       if (!map.has(i.brand)) map.set(i.brand, { sum: 0, count: 0 });
@@ -379,7 +390,7 @@ export function NykaaAnalyticsPage() {
       .map(([brand, { sum, count }]) => ({ brand, value: Number((sum / count).toFixed(2)), count }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 10);
-  }, [items, ratingYear]);
+  }, [periodItems, ratingYear]);
 
   // Overall sentiment score across every brand, month over month — a single
   // line (no brand identity to encode) alongside the two per-brand lines above.
@@ -519,7 +530,7 @@ export function NykaaAnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <div>
           <h2 className="font-display text-lg font-semibold">Analytics</h2>
           <p className="mt-1 text-sm text-ink/60 dark:text-ink-dark/60">
@@ -528,7 +539,8 @@ export function NykaaAnalyticsPage() {
               : `Deep dive on ${brandFilter} — every review for this brand.`}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <NykaaPeriodDateControls picker={picker} />
           {!isOverview && (
             <button
               onClick={() => setBrandFilter("all")}
@@ -555,8 +567,11 @@ export function NykaaAnalyticsPage() {
           >
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
+          <NykaaPeriodTypeToggle picker={picker} className="ml-auto" />
         </div>
       </div>
+
+      <NykaaAnalyticsChatPanel />
 
       {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
@@ -819,7 +834,17 @@ export function NykaaAnalyticsPage() {
                   empty={recurringThemes.length === 0 ? "No themes recorded yet." : null}
                   height={260}
                 >
-                  <Treemap data={recurringThemes} dataKey="size" stroke="#fff" content={<TreemapCell />} />
+                  <BarChart data={recurringThemes} layout="vertical" margin={{ left: 12, right: 12 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.15} />
+                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={140} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(value) => [value, "Mentions"]} />
+                    <Bar dataKey="size" radius={[0, 6, 6, 0]} barSize={22}>
+                      {recurringThemes.map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ChartCard>
               </div>
 
@@ -965,7 +990,17 @@ export function NykaaAnalyticsPage() {
                   empty={recurringThemes.length === 0 ? "No themes recorded yet." : null}
                   height={240}
                 >
-                  <Treemap data={recurringThemes} dataKey="size" stroke="#fff" content={<TreemapCell />} />
+                  <BarChart data={recurringThemes} layout="vertical" margin={{ left: 12, right: 12 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.15} />
+                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={140} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(value) => [value, "Mentions"]} />
+                    <Bar dataKey="size" radius={[0, 6, 6, 0]} barSize={22}>
+                      {recurringThemes.map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ChartCard>
               </div>
 
@@ -1057,33 +1092,5 @@ export function NykaaAnalyticsPage() {
         </>
       )}
     </div>
-  );
-}
-
-// Recharts' Treemap needs an explicit cell renderer to draw fill/stroke/text
-// itself (unlike Bar/Pie's <Cell> children) — kept minimal: the rect, plus a
-// label only when the cell is large enough to hold it without overflowing
-// (see the dataviz skill's "never a clipped label" rule).
-function TreemapCell({ x, y, width, height, name, size, fill }) {
-  const showLabel = width > 60 && height > 28;
-  return (
-    <g>
-      {/* Recharts' Treemap can hand the content renderer a node with no
-          `fill` of its own (e.g. an implicit root/leftover node when there
-          are very few leaves) — style="fill: undefined" would resolve to
-          the SVG default (solid black), so fall back to the ramp's own
-          lightest step rather than let that show through. */}
-      <rect x={x} y={y} width={width} height={height} style={{ fill: fill ?? PINK_RAMP[0], stroke: "#fff", strokeWidth: 2 }} />
-      {showLabel && (
-        <text x={x + 6} y={y + 16} fontSize={11} fill="#fff" fontWeight={600}>
-          {name}
-        </text>
-      )}
-      {showLabel && (
-        <text x={x + 6} y={y + 30} fontSize={10} fill="#fff" opacity={0.85}>
-          {size}
-        </text>
-      )}
-    </g>
   );
 }

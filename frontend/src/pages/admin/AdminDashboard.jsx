@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { BarChart3, Building2, Clock, Inbox, Sparkles, Table2, Users, Zap } from "lucide-react";
 import { api } from "../../api";
 import { useAuth } from "../../auth/AuthContext";
-import { useTheme } from "../../hooks/useTheme";
 import { Header } from "../../components/Header";
 import { MegaTabs } from "../../components/MegaTabs";
 import { RaceTab } from "../../components/RaceTab";
@@ -47,15 +46,12 @@ export function AdminDashboard() {
   const [megaTab, setMegaTab] = useState("tickets");
   const [tab, setTab] = useState("queue");
   const [nykaaTab, setNykaaTab] = useState("tickets");
-  const { theme, toggle } = useTheme();
   const [health, setHealth] = useState(null);
   const { logout } = useAuth();
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => {});
   }, [tab]);
-
-  const nykaaWide = nykaaTab === "tickets" || nykaaTab === "ai-resolved" || nykaaTab === "analytics";
 
   return (
     <div className="app-backdrop min-h-screen">
@@ -67,13 +63,12 @@ export function AdminDashboard() {
             tabs={TABS}
             tab={tab}
             onTab={setTab}
-            theme={theme}
-            onToggleTheme={toggle}
             health={health}
-            userLabel="Admin"
+            userName="Admin"
+            roleLabel="Admin"
             onLogout={logout}
           />
-          <main className={`mx-auto px-4 py-8 ${tab === "all" || tab === "ai-resolved" ? "max-w-[1600px]" : "max-w-6xl"}`}>
+          <main className="container-app px-4 py-8">
             {tab === "queue" && <NewTicketsQueuePage />}
             {tab === "all" && <AllTicketsPage />}
             {tab === "ai-resolved" && <AiResolvedPage />}
@@ -92,12 +87,11 @@ export function AdminDashboard() {
             tabs={NYKAA_TABS}
             tab={nykaaTab}
             onTab={setNykaaTab}
-            theme={theme}
-            onToggleTheme={toggle}
-            userLabel="Admin"
+            userName="Admin"
+            roleLabel="Admin"
             onLogout={logout}
           />
-          <main className={`mx-auto px-4 py-8 ${nykaaWide ? "max-w-[1600px]" : "max-w-6xl"}`}>
+          <main className="container-app px-4 py-8">
             <div>
               {nykaaTab === "tickets" && <NykaaAdminTicketsPage />}
               {nykaaTab === "ai-resolved" && <NykaaAiResolvedPage />}

@@ -1,8 +1,27 @@
 import { useEffect, useState } from "react";
 import clsx from "clsx";
-import { ChevronDown, ChevronUp, Loader2, Minus, Plus, Send, ShoppingBag, Sparkles, Star } from "lucide-react";
+import {
+  Bath,
+  ChevronDown,
+  ChevronUp,
+  Droplet,
+  Flower2,
+  Hand,
+  Leaf,
+  Loader2,
+  Minus,
+  Paintbrush,
+  Palette,
+  Plus,
+  Scissors,
+  Send,
+  ShoppingBag,
+  Sparkles,
+  Star,
+  User,
+} from "lucide-react";
 import { api } from "../../../api";
-import { Button, Card } from "../../../components/primitives";
+import { Button, Card, Modal } from "../../../components/primitives";
 
 // Shared by NykaaCatalogPage (the shop grid) and NykaaBeautyProfilePage (the
 // "Recommended for you" grid) — split into its own module so the two pages
@@ -13,28 +32,37 @@ export function formatInr(amount) {
   return `₹${Number(amount).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
+// "skin_type" -> "Skin Type" — product.details keys are free-form snake_case
+// straight from the backend's JSONB blob, never meant to be shown verbatim.
+export function formatDetailLabel(key) {
+  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // There's no real product photography in this dataset — a colored tile
 // with a category-appropriate icon stands in for a photo, consistently,
-// rather than a broken <img> or nothing at all.
+// rather than a broken <img> or nothing at all. Icons, not emoji, so the
+// look stays consistent across platforms/fonts instead of depending on
+// whatever emoji set the viewer's OS happens to render.
 const CATEGORY_VISUAL = {
-  Makeup: { icon: "💄", gradient: "from-pink-300/50 to-rose-200/40" },
-  Skincare: { icon: "🧴", gradient: "from-emerald-300/50 to-teal-200/40" },
-  "Hair Care": { icon: "💇", gradient: "from-amber-300/50 to-orange-200/40" },
-  "Bath & Body": { icon: "🧼", gradient: "from-sky-300/50 to-cyan-200/40" },
-  Fragrance: { icon: "🌸", gradient: "from-fuchsia-300/50 to-pink-200/40" },
-  "Men's Grooming": { icon: "🪒", gradient: "from-slate-300/50 to-blue-200/40" },
-  "Beauty Tools": { icon: "🪞", gradient: "from-violet-300/50 to-purple-200/40" },
-  Wellness: { icon: "🌿", gradient: "from-lime-300/50 to-green-200/40" },
-  "Personal Care": { icon: "🧽", gradient: "from-indigo-300/50 to-blue-200/40" },
-  "Nail Care": { icon: "💅", gradient: "from-rose-300/50 to-red-200/40" },
+  Makeup: { icon: Palette, gradient: "from-pink-300/50 to-rose-200/40" },
+  Skincare: { icon: Droplet, gradient: "from-emerald-300/50 to-teal-200/40" },
+  "Hair Care": { icon: Scissors, gradient: "from-amber-300/50 to-orange-200/40" },
+  "Bath & Body": { icon: Bath, gradient: "from-sky-300/50 to-cyan-200/40" },
+  Fragrance: { icon: Flower2, gradient: "from-fuchsia-300/50 to-pink-200/40" },
+  "Men's Grooming": { icon: User, gradient: "from-slate-300/50 to-blue-200/40" },
+  "Beauty Tools": { icon: Paintbrush, gradient: "from-violet-300/50 to-purple-200/40" },
+  Wellness: { icon: Leaf, gradient: "from-lime-300/50 to-green-200/40" },
+  "Personal Care": { icon: Hand, gradient: "from-indigo-300/50 to-blue-200/40" },
+  "Nail Care": { icon: Sparkles, gradient: "from-rose-300/50 to-red-200/40" },
 };
-const DEFAULT_VISUAL = { icon: "✨", gradient: "from-brand/30 to-brand/10" };
+const DEFAULT_VISUAL = { icon: Sparkles, gradient: "from-brand/30 to-brand/10" };
 
-function ProductImage({ categoryName }) {
+export function ProductImage({ categoryName, size = "h-32" }) {
   const visual = CATEGORY_VISUAL[categoryName] ?? DEFAULT_VISUAL;
+  const Icon = visual.icon;
   return (
-    <div className={clsx("grid h-28 place-items-center rounded-xl bg-gradient-to-br text-4xl", visual.gradient)}>
-      {visual.icon}
+    <div className={clsx("grid place-items-center rounded-xl bg-gradient-to-br text-ink/70 dark:text-ink-dark/70", size, visual.gradient)}>
+      <Icon size={40} strokeWidth={1.5} />
     </div>
   );
 }
@@ -88,19 +116,16 @@ function ReviewRow({ review }) {
   );
 }
 
-// Phase 4 "what customers say" + "ask the reviews" — collapsed by default so
-// browsing the grid never fires an LLM call per product; the summary is
-// fetched once, the first time this panel is expanded, and cached in this
-// component's own state for the rest of the session (re-collapsing and
-// re-expanding the same card in the same page load won't refetch).
-function WhatCustomersSay({ productId, visible }) {
+// Data + actions behind "what customers say"/"ask the reviews" — shared by
+// the popup (WhatCustomersSay, below) and the full Product Detail Page, so
+// both read/ask against the exact same fetch logic instead of two
+// diverging copies. `enabled` gates fetching (the popup only wants to fire
+// once actually expanded; the detail page always wants it immediately).
+export function useProductQA(productId, { enabled = true } = {}) {
   const [summary, setSummary] = useState(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [summaryError, setSummaryError] = useState(null);
 
-  // "Recent reviews" — same lazy-on-first-expand pattern as the summary
-  // fetch below, its own independent request/cache so a slow reviews fetch
-  // never blocks the summary (or vice versa).
   const [reviews, setReviews] = useState(null);
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [reviewsError, setReviewsError] = useState(null);
@@ -108,18 +133,31 @@ function WhatCustomersSay({ productId, visible }) {
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState(null);
-  // Local-only history of this card's Q&A, per the spec — no need to persist
-  // across reloads, just enough so a shopper can ask more than one question
-  // and still see earlier answers while the card stays expanded.
   const [history, setHistory] = useState([]);
 
-  // Gated on `visible` (not just mount) because the parent always renders
-  // this component now, rather than conditionally including it in JSX —
-  // that's what lets `summary`/`history` survive a collapse/re-expand
-  // instead of being wiped by an unmount. Fetching only fires the first
-  // time this card is actually expanded, never on initial page load.
+  // "Didn't find what you're looking for?" — offered once at least one
+  // question's been asked, rather than trying to detect dissatisfaction in
+  // the answer text itself. Fetched only once the shopper actually opts in.
+  const [alternatives, setAlternatives] = useState(null);
+  const [loadingAlternatives, setLoadingAlternatives] = useState(false);
+  const [alternativesError, setAlternativesError] = useState(null);
+
+  async function showAlternatives() {
+    if (alternatives || loadingAlternatives) return;
+    setLoadingAlternatives(true);
+    setAlternativesError(null);
+    try {
+      const r = await api.nykaaProductAlternatives(productId);
+      setAlternatives(r.products);
+    } catch (e) {
+      setAlternativesError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoadingAlternatives(false);
+    }
+  }
+
   useEffect(() => {
-    if (!visible || summary || loadingSummary) return;
+    if (!enabled || summary || loadingSummary) return;
     setLoadingSummary(true);
     setSummaryError(null);
     api
@@ -128,10 +166,10 @@ function WhatCustomersSay({ productId, visible }) {
       .catch((e) => setSummaryError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoadingSummary(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, productId]);
+  }, [enabled, productId]);
 
   useEffect(() => {
-    if (!visible || reviews || loadingReviews) return;
+    if (!enabled || reviews || loadingReviews) return;
     setLoadingReviews(true);
     setReviewsError(null);
     api
@@ -140,9 +178,7 @@ function WhatCustomersSay({ productId, visible }) {
       .catch((e) => setReviewsError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoadingReviews(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, productId]);
-
-  if (!visible) return null;
+  }, [enabled, productId]);
 
   async function submitQuestion(e) {
     e.preventDefault();
@@ -161,8 +197,42 @@ function WhatCustomersSay({ productId, visible }) {
     }
   }
 
+  return {
+    summary,
+    loadingSummary,
+    summaryError,
+    reviews,
+    loadingReviews,
+    reviewsError,
+    question,
+    setQuestion,
+    asking,
+    askError,
+    history,
+    submitQuestion,
+    alternatives,
+    loadingAlternatives,
+    alternativesError,
+    showAlternatives,
+  };
+}
+
+// The AI fit-summary + recent reviews + Q&A history + ask form + "didn't
+// find what you need?" alternatives follow-up — pure rendering over a
+// useProductQA() result, reused by both the popup and the full Product
+// Detail Page so they never visually drift apart. onAddProduct/onOpenDetail
+// are only used by the alternatives grid below (full ProductCards, same as
+// "You may also like"/"similar products" elsewhere in this app).
+export function ProductReviewsSection({ qa, onAddProduct, onOpenDetail }) {
+  const {
+    summary, loadingSummary, summaryError, reviews, loadingReviews, reviewsError,
+    question, setQuestion, asking, askError, history, submitQuestion,
+    alternatives, loadingAlternatives, alternativesError, showAlternatives,
+  } = qa;
+  const [altQuantities, setAltQuantities] = useState({});
+
   return (
-    <div className="mt-3 space-y-2.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.03] p-3">
+    <>
       {loadingSummary ? (
         <p className="flex items-center gap-1.5 text-xs text-ink/50 dark:text-ink-dark/50">
           <Loader2 size={12} className="animate-spin" /> Reading reviews...
@@ -222,7 +292,7 @@ function WhatCustomersSay({ productId, visible }) {
         ) : reviews && reviews.length === 0 ? (
           <p className="mt-1.5 text-xs text-ink/50 dark:text-ink-dark/50">No published reviews yet.</p>
         ) : reviews ? (
-          <div className="mt-1.5 max-h-56 space-y-2 overflow-y-auto pr-1">
+          <div className="mt-1.5 max-h-56 space-y-2 overflow-y-auto overscroll-contain pr-1">
             {reviews.map((r) => (
               <ReviewRow key={r.id} review={r} />
             ))}
@@ -262,23 +332,136 @@ function WhatCustomersSay({ productId, visible }) {
         </Button>
       </form>
       {askError && <p className="text-[11px] text-red-600 dark:text-red-400">{askError}</p>}
-    </div>
+
+      {history.length > 0 && (
+        <div className="space-y-2 border-t border-black/5 dark:border-white/10 pt-2">
+          {!alternatives && !loadingAlternatives && (
+            <button
+              type="button"
+              onClick={showAlternatives}
+              className="text-[11px] font-medium text-brand dark:text-brand-dim hover:underline"
+            >
+              Didn't find what you're looking for? See other products
+            </button>
+          )}
+          {loadingAlternatives && (
+            <p className="flex items-center gap-1.5 text-xs text-ink/50 dark:text-ink-dark/50">
+              <Loader2 size={12} className="animate-spin" /> Finding other options...
+            </p>
+          )}
+          {alternativesError && <p className="text-[11px] text-red-600 dark:text-red-400">{alternativesError}</p>}
+          {alternatives && alternatives.length === 0 && (
+            <p className="text-xs text-ink/50 dark:text-ink-dark/50">No other options in this category yet.</p>
+          )}
+          {alternatives && alternatives.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/40 dark:text-ink-dark/40">
+                You might also like
+              </p>
+              <div className="mt-2 grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
+                {alternatives.map((p) => (
+                  <ProductCard
+                    key={p.id}
+                    product={p}
+                    quantity={altQuantities[p.id] ?? 1}
+                    onQuantityChange={(q) => setAltQuantities((prev) => ({ ...prev, [p.id]: q }))}
+                    onAdd={(q) => onAddProduct?.(p, q)}
+                    onAddProduct={onAddProduct}
+                    onOpenDetail={onOpenDetail}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
-export function ProductCard({ product, quantity, onQuantityChange, onAdd }) {
+// Phase 4 "what customers say" — collapsed by default so browsing the grid
+// never fires an LLM call per product; the summary/reviews are fetched
+// once, the first time this popup is opened, and cached in useProductQA's
+// state for the rest of the session (closing and reopening the same card's
+// popup in the same page load won't refetch). A popup rather than growing
+// the card in place, so a shopper can read reviews/ask a question without
+// losing their place in the grid.
+function WhatCustomersSay({ product, visible, onClose, onAddProduct }) {
+  const productId = product.id;
+  const detailTags = Object.entries(product.details || {}).slice(0, 3);
+  const qa = useProductQA(productId, { enabled: visible });
+
+  if (!visible) return null;
+
+  return (
+    <Modal title={product.name} onClose={onClose}>
+      <div className="space-y-2.5">
+        <div className="flex gap-3 border-b border-black/5 dark:border-white/10 pb-3">
+          <div className="w-20 shrink-0">
+            <ProductImage categoryName={product.category_name} size="h-20" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-ink dark:text-ink-dark">{product.name}</p>
+                <p className="text-xs text-ink/50 dark:text-ink-dark/50">{product.brand_name}</p>
+              </div>
+              <span className="font-display shrink-0 text-sm font-semibold text-brand dark:text-brand-dim">
+                {formatInr(product.price_inr)}
+              </span>
+            </div>
+            {product.description && (
+              <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-ink/60 dark:text-ink-dark/60">
+                {product.description}
+              </p>
+            )}
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand dark:text-brand-dim">
+                {product.category_name}
+              </span>
+              {detailTags.map(([key, value]) => (
+                <span
+                  key={key}
+                  className="rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-[10px] text-ink/60 dark:text-ink-dark/60"
+                >
+                  {formatDetailLabel(key)}: {String(value)}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <ProductReviewsSection qa={qa} onAddProduct={onAddProduct} />
+      </div>
+    </Modal>
+  );
+}
+
+export function ProductCard({ product, quantity, onQuantityChange, onAdd, onAddProduct, onOpenDetail }) {
   const detailTags = Object.entries(product.details || {}).slice(0, 2);
   const [expanded, setExpanded] = useState(false);
   return (
-    <Card className="flex flex-col p-4">
-      <ProductImage categoryName={product.category_name} />
+    <Card className="flex flex-col p-4 transition hover:shadow-md hover:shadow-black/[0.06]">
+      {onOpenDetail ? (
+        <button type="button" onClick={() => onOpenDetail(product)} className="text-left">
+          <ProductImage categoryName={product.category_name} />
+        </button>
+      ) : (
+        <ProductImage categoryName={product.category_name} />
+      )}
 
-      <div className="mt-3 flex items-start justify-between gap-2">
+      <div className="mt-3.5 flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold text-ink dark:text-ink-dark">{product.name}</h3>
+          {onOpenDetail ? (
+            <button type="button" onClick={() => onOpenDetail(product)} className="text-left hover:underline">
+              <h3 className="truncate text-sm font-semibold text-ink dark:text-ink-dark">{product.name}</h3>
+            </button>
+          ) : (
+            <h3 className="truncate text-sm font-semibold text-ink dark:text-ink-dark">{product.name}</h3>
+          )}
           <p className="text-xs text-ink/50 dark:text-ink-dark/50">{product.brand_name}</p>
         </div>
-        <span className="shrink-0 text-sm font-semibold text-brand dark:text-brand-dim">
+        <span className="font-display shrink-0 text-base font-semibold text-brand dark:text-brand-dim">
           {formatInr(product.price_inr)}
         </span>
       </div>
@@ -288,7 +471,7 @@ export function ProductCard({ product, quantity, onQuantityChange, onAdd }) {
       </p>
 
       <div className="mt-2 flex flex-wrap gap-1.5">
-        <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-medium text-brand dark:text-brand-dim">
+        <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand dark:text-brand-dim">
           {product.category_name}
         </span>
         {detailTags.map(([key, value]) => (
@@ -296,7 +479,7 @@ export function ProductCard({ product, quantity, onQuantityChange, onAdd }) {
             key={key}
             className="rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-[10px] text-ink/60 dark:text-ink-dark/60"
           >
-            {key}: {String(value)}
+            {formatDetailLabel(key)}: {String(value)}
           </span>
         ))}
       </div>
@@ -308,7 +491,7 @@ export function ProductCard({ product, quantity, onQuantityChange, onAdd }) {
       >
         <Sparkles size={12} /> What customers say {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
       </button>
-      <WhatCustomersSay productId={product.id} visible={expanded} />
+      <WhatCustomersSay product={product} visible={expanded} onClose={() => setExpanded(false)} onAddProduct={onAddProduct} />
 
       <div className="mt-auto flex items-center justify-between gap-2 border-t border-black/5 dark:border-white/10 pt-3">
         <div className="flex items-center gap-1 rounded-lg border border-black/10 dark:border-white/15">

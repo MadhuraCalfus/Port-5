@@ -1,31 +1,38 @@
 @import "tailwindcss";
 
+/* Dark mode has been removed as a user-facing option. This keeps the
+   `dark:` variant gated on a `.dark` class that nothing in the app ever
+   applies anymore, rather than falling back to Tailwind's default
+   prefers-color-scheme media query — so a visitor's OS dark-mode setting
+   can't silently re-enable dark styling. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Fraunces", ui-serif, Georgia, serif;
 
-  /* NykaaPulse brand theme — baby pink + white, applied app-wide. Priority
-     colors (high/medium/low) are kept as red/amber/green on purpose —
-     that's a severity convention non-technical users already recognize,
-     not a brand-color choice. */
-  --color-canvas: #fdedf3;
+  /* NykaaPulse brand theme — a warmer, more editorial "beauty counter"
+     palette (deep rose + warm ivory-blush + a gold accent for sale/promo
+     moments), applied app-wide. Priority colors (high/medium/low) are kept
+     as red/amber/green on purpose — that's a severity convention
+     non-technical users already recognize, not a brand-color choice. */
+  --color-canvas: #faf0ea;
   --color-canvas-dark: #1c1115;
   --color-surface: #ffffff;
   --color-surface-dark: #26151c;
-  --color-ink: #1a1a1a;
+  --color-ink: #211a1a;
   --color-ink-dark: #f2f2f2;
 
-  --color-brand: #d6588c;
-  --color-brand-dim: #f2a6c6;
+  --color-brand: #b8456f;
+  --color-brand-dim: #e3aac0;
+  --color-accent-gold: #c99a4a;
   --color-high: #c0392b;
   --color-medium: #b8860b;
   --color-low: #2f8f5b;
 }
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 html {
@@ -38,63 +45,42 @@ body {
   color: var(--color-ink);
 }
 
-:root[data-theme="dark"] body {
-  background: var(--color-canvas-dark);
-  color: var(--color-ink-dark);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) body {
-    background: var(--color-canvas-dark);
-    color: var(--color-ink-dark);
-  }
-}
-
 .font-display {
   font-family: var(--font-display);
 }
 
-/* subtle grain/gradient backdrop, theme aware — a quiet hint of the brand pink */
-.app-backdrop {
-  background-image: radial-gradient(circle at 15% 0%, rgba(214, 88, 140, 0.10), transparent 45%),
-    radial-gradient(circle at 85% 10%, rgba(214, 88, 140, 0.07), transparent 45%);
+/* Shared dashboard width — one place to widen every dashboard's Header,
+   MegaTabs, and <main> together, instead of the max-w-6xl / max-w-[1600px]
+   / max-w-[90rem] literals that used to be scattered (and inconsistent)
+   across each dashboard file. Auth screens intentionally don't use this —
+   they stay narrow. */
+.container-app {
+  max-width: 100rem;
+  margin-inline: auto;
 }
 
-/* Login/signup only — a richer wash of the brand pink plus a soft dot
+/* subtle grain/gradient backdrop — a quiet hint of the brand rose */
+.app-backdrop {
+  background-image: radial-gradient(circle at 15% 0%, rgba(184, 69, 111, 0.10), transparent 45%),
+    radial-gradient(circle at 85% 10%, rgba(184, 69, 111, 0.07), transparent 45%);
+}
+
+/* Login/signup only — a richer wash of the brand rose plus a soft dot
    texture, so the auth screens feel a little more considered than a plain
    card on a flat page, without adding any extra layout/panel. */
 .auth-backdrop {
   background-color: var(--color-canvas);
   background-image:
-    radial-gradient(circle at 12% 8%, rgba(214, 88, 140, 0.30), transparent 48%),
-    radial-gradient(circle at 88% 4%, rgba(242, 166, 198, 0.30), transparent 46%),
-    radial-gradient(circle at 50% 105%, rgba(255, 205, 225, 0.35), transparent 55%);
+    radial-gradient(circle at 12% 8%, rgba(184, 69, 111, 0.28), transparent 48%),
+    radial-gradient(circle at 88% 4%, rgba(227, 170, 192, 0.32), transparent 46%),
+    radial-gradient(circle at 50% 105%, rgba(201, 154, 74, 0.12), transparent 55%);
 }
-:root[data-theme="dark"] .auth-backdrop {
-  background-color: var(--color-canvas-dark);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .auth-backdrop {
-    background-color: var(--color-canvas-dark);
-  }
-}
-
 .auth-float-icon {
   opacity: 0.38;
   color: var(--color-brand);
   animation-name: auth-float;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
-}
-:root[data-theme="dark"] .auth-float-icon {
-  opacity: 0.28;
-  color: var(--color-brand-dim);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .auth-float-icon {
-    opacity: 0.28;
-    color: var(--color-brand-dim);
-  }
 }
 @media (prefers-reduced-motion: reduce) {
   .auth-float-icon {

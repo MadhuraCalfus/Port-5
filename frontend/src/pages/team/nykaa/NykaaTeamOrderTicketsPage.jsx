@@ -86,7 +86,7 @@ export function NykaaTeamOrderTicketsPage() {
                 <th className="px-3 py-2">Customer</th>
                 <th className="px-3 py-2">Ticket ID</th>
                 <th className="px-3 py-2">Product</th>
-                <th className="px-3 py-2">Message</th>
+                <th className="px-3 py-2">Issue</th>
                 <th className="px-3 py-2">Priority</th>
                 <th className="px-3 py-2">Tone</th>
                 <th className="px-3 py-2">Confidence</th>
@@ -111,7 +111,7 @@ export function NykaaTeamOrderTicketsPage() {
                       <div className="mt-0.5 text-[11px] text-ink/40 dark:text-ink-dark/40">{t.brand}</div>
                     )}
                   </td>
-                  <td className="max-w-xs px-3 py-2.5 text-ink/80 dark:text-ink-dark/80">{t.message}</td>
+                  <td className="max-w-xs px-3 py-2.5 text-ink/80 dark:text-ink-dark/80">{t.summary ?? t.message}</td>
                   <td className="px-3 py-2.5"><PriorityBadge priority={t.priority} escalated={t.escalated} /></td>
                   <td className="px-3 py-2.5"><ToneBadge tone={t.tone} /></td>
                   <td className="px-3 py-2.5"><ConfidenceMeter value={t.confidence} ambiguous={t.is_ambiguous} /></td>

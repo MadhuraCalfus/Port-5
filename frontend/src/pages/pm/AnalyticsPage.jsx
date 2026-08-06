@@ -207,36 +207,6 @@ export function AnalyticsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-lg font-semibold">Analytics</h2>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="grid grid-cols-4 gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] p-1">
-            {PERIOD_TYPES.map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                disabled={isCustomRange}
-                onClick={() => setPeriodType(id)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
-                  periodType === id && !isCustomRange
-                    ? "bg-surface dark:bg-surface-dark text-brand dark:text-brand-dim shadow-sm"
-                    : "text-ink/50 dark:text-ink-dark/50 hover:text-ink dark:hover:text-ink-dark"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={toggleCustomRange}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
-              isCustomRange
-                ? "bg-brand/10 text-brand dark:text-brand-dim"
-                : "text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
-            }`}
-          >
-            <CalendarRange size={13} /> Custom range
-          </button>
-
           {isCustomRange ? (
             <>
               <input
@@ -313,6 +283,36 @@ export function AnalyticsPage() {
               )}
             </>
           )}
+
+          <div className="grid grid-cols-4 gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] p-1">
+            {PERIOD_TYPES.map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                disabled={isCustomRange}
+                onClick={() => setPeriodType(id)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                  periodType === id && !isCustomRange
+                    ? "bg-surface dark:bg-surface-dark text-brand dark:text-brand-dim shadow-sm"
+                    : "text-ink/50 dark:text-ink-dark/50 hover:text-ink dark:hover:text-ink-dark"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={toggleCustomRange}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+              isCustomRange
+                ? "bg-brand/10 text-brand dark:text-brand-dim"
+                : "text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
+            }`}
+          >
+            <CalendarRange size={13} /> Custom range
+          </button>
 
           <button
             onClick={exportPdf}

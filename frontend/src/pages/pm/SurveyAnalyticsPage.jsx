@@ -3,6 +3,7 @@ import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveCo
 import { FileDown, Loader2, RefreshCw } from "lucide-react";
 import { api } from "../../api";
 import { Card } from "../../components/primitives";
+import { NykaaPeriodDateControls, NykaaPeriodTypeToggle, useNykaaPeriodFilter } from "../../components/NykaaPeriodToggle";
 import { generateSurveyOverviewPdf, generateSurveyReportPdf } from "../../pmReportExport";
 
 const ALL_SURVEYS = "all";
@@ -27,6 +28,7 @@ function scaleColor(value) {
 }
 
 export function SurveyAnalyticsPage() {
+  const picker = useNykaaPeriodFilter("all");
   const [surveys, setSurveys] = useState(null);
   const [selected, setSelected] = useState(ALL_SURVEYS);
   const [results, setResults] = useState(null);
@@ -53,10 +55,11 @@ export function SurveyAnalyticsPage() {
   async function loadSelected() {
     setLoadingResults(true);
     try {
+      const periodType = picker.isAllTime ? undefined : picker.periodType;
       if (selected === ALL_SURVEYS) {
-        setOverview(await api.pmSurveysOverview());
+        setOverview(await api.pmSurveysOverview(periodType, picker.periodKey));
       } else {
-        setResults(await api.pmSurveyResults(selected));
+        setResults(await api.pmSurveyResults(selected, periodType, picker.periodKey));
       }
     } finally {
       setLoadingResults(false);
@@ -66,7 +69,7 @@ export function SurveyAnalyticsPage() {
   useEffect(() => {
     loadSelected();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected]);
+  }, [selected, picker.periodType, picker.periodKey]);
 
   const selectedSurvey = useMemo(() => surveys?.find((s) => s.id === selected) ?? null, [surveys, selected]);
   const isAll = selected === ALL_SURVEYS;
@@ -98,7 +101,9 @@ export function SurveyAnalyticsPage() {
           <h2 className="font-display text-lg font-semibold">Survey Analytics</h2>
           <p className="mt-1 text-sm text-ink/60 dark:text-ink-dark/60">Results for the surveys you've sent to customers.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <NykaaPeriodDateControls picker={picker} />
+          <NykaaPeriodTypeToggle picker={picker} />
           <select
             value={selected}
             onChange={(e) => setSelected(e.target.value === ALL_SURVEYS ? ALL_SURVEYS : Number(e.target.value))}

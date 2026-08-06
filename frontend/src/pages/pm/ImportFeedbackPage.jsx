@@ -126,23 +126,6 @@ export function ImportFeedbackPage() {
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="grid grid-cols-5 gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] p-1">
-              {PERIOD_TYPES.map(({ id, label }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setPeriodType(id)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                    periodType === id
-                      ? "bg-surface dark:bg-surface-dark text-brand dark:text-brand-dim shadow-sm"
-                      : "text-ink/50 dark:text-ink-dark/50 hover:text-ink dark:hover:text-ink-dark"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
             {periodType !== "all" && (
               <select
                 value={selectedYear}
@@ -198,6 +181,23 @@ export function ImportFeedbackPage() {
                 ))}
               </select>
             )}
+
+            <div className="grid grid-cols-5 gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] p-1">
+              {PERIOD_TYPES.map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setPeriodType(id)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                    periodType === id
+                      ? "bg-surface dark:bg-surface-dark text-brand dark:text-brand-dim shadow-sm"
+                      : "text-ink/50 dark:text-ink-dark/50 hover:text-ink dark:hover:text-ink-dark"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
 
             <select
               value={categoryFilter}

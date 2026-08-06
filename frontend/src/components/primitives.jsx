@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { AlertCircle, AlertTriangle, Check, Frown, HelpCircle, Meh, Smile, X, Zap as ZapIcon } from "lucide-react";
 
@@ -159,20 +160,33 @@ export function StatusStepper({ status, labels = STATUS_STEPS }) {
   );
 }
 
-export function Toast({ message }) {
+export function Toast({ message, onClick }) {
   if (!message) return null;
   return (
-    <div className="fade-up fixed bottom-6 right-6 z-50 rounded-xl bg-ink dark:bg-ink-dark px-4 py-3 text-sm font-medium text-ink-dark dark:text-ink shadow-lg shadow-black/20">
+    <div
+      onClick={onClick}
+      className={clsx(
+        "fade-up fixed bottom-6 right-6 z-50 rounded-xl bg-ink dark:bg-ink-dark px-4 py-3 text-sm font-medium text-ink-dark dark:text-ink shadow-lg shadow-black/20",
+        onClick && "cursor-pointer",
+      )}
+    >
       {message}
     </div>
   );
 }
 
+// Portaled to document.body — a Modal opened from inside a SlideOver (whose
+// sliding panel keeps a non-none `transform` from its own animation, even
+// after that animation finishes) would otherwise become a descendant of an
+// element that establishes a containing block for `position: fixed`,
+// confining the "centered over everything" dialog to that panel's bounds
+// instead of the viewport. Rendering outside the React tree's DOM position
+// sidesteps that entirely, regardless of how deeply nested the caller is.
 export function Modal({ title, onClose, children }) {
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="fade-up w-full max-w-2xl rounded-2xl border border-black/8 dark:border-white/10 bg-surface dark:bg-surface-dark p-5 shadow-xl"
+        className="fade-up thin-scroll max-h-[90vh] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-2xl border border-black/8 dark:border-white/10 bg-surface dark:bg-surface-dark p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
@@ -187,18 +201,24 @@ export function Modal({ title, onClose, children }) {
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 // Right-anchored panel — the "Bag" slide-over pattern real e-commerce sites
 // use for cart/account/orders, vs. Modal's centered dialog for one-off forms.
+// Portaled to document.body for the same reason Modal is (see its comment) —
+// a SlideOver nested inside another SlideOver's already-animated panel would
+// otherwise render confined to it instead of the full viewport. `overscroll-
+// contain` stops this panel's own scroll from chaining into the page
+// scrolling behind it once the panel hits its top/bottom edge.
 export function SlideOver({ title, onClose, children, widthClassName = "max-w-md" }) {
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
       <div
         className={clsx(
-          "slide-in-right thin-scroll h-full w-full overflow-y-auto border-l border-black/8 dark:border-white/10 bg-surface dark:bg-surface-dark p-5 shadow-xl",
+          "slide-in-right thin-scroll h-full w-full overflow-y-auto overscroll-contain border-l border-black/8 dark:border-white/10 bg-surface dark:bg-surface-dark p-5 shadow-xl",
           widthClassName,
         )}
         onClick={(e) => e.stopPropagation()}
@@ -215,7 +235,8 @@ export function SlideOver({ title, onClose, children, widthClassName = "max-w-md
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

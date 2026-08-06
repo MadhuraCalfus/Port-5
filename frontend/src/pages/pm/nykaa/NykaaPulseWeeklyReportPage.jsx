@@ -120,26 +120,9 @@ export function NykaaPulseWeeklyReportPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <h2 className="font-display text-lg font-semibold">{reportTypeLabel} report</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="grid grid-cols-3 gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] p-1">
-            {REPORT_TYPES.map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setReportType(id)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                  reportType === id
-                    ? "bg-surface dark:bg-surface-dark text-brand dark:text-brand-dim shadow-sm"
-                    : "text-ink/50 dark:text-ink-dark/50 hover:text-ink dark:hover:text-ink-dark"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(Number(e.target.value))}
@@ -194,6 +177,23 @@ export function NykaaPulseWeeklyReportPage() {
             {exporting ? <Loader2 size={13} className="animate-spin" /> : <FileDown size={13} />}
             Export PDF
           </button>
+
+          <div className="ml-auto grid grid-cols-3 gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] p-1">
+            {REPORT_TYPES.map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setReportType(id)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  reportType === id
+                    ? "bg-surface dark:bg-surface-dark text-brand dark:text-brand-dim shadow-sm"
+                    : "text-ink/50 dark:text-ink-dark/50 hover:text-ink dark:hover:text-ink-dark"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

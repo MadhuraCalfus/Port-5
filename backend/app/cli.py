@@ -84,21 +84,22 @@ def cmd_eval_feedback(args) -> None:
     blind-input test, not something that touches the real database."""
     results = feedback_eval.run_eval()
     for r in results:
-        ok = "✓" if (r.sentiment_correct and r.actionable_correct and r.theme_correct) else "✗"
+        ok = "✓" if (r.sentiment_correct and r.actionable_correct and r.category_correct) else "✗"
         print(f"{ok} {BOLD}[{r.tag}]{RESET} {r.text[:60]!r}")
         sent_mark = "✓" if r.sentiment_correct else "✗"
         act_mark = "✓" if r.actionable_correct else "✗"
-        theme_mark = "✓" if r.theme_correct else "✗"
+        cat_mark = "✓" if r.category_correct else "✗"
         print(f"    sentiment {sent_mark} expected={r.expected_sentiment} actual={r.actual_sentiment}")
         print(f"    actionable {act_mark} expected={r.expected_actionable} actual={r.actual_actionable}")
-        print(f"    theme {theme_mark} actual={r.actual_theme!r} (looking for one of {r.theme_keywords})")
+        print(f"    category {cat_mark} expected={r.expected_category} actual={r.actual_category}")
+        print(f"    theme (ungraded, open vocabulary) actual={r.actual_theme!r}")
         print(f"    {DIM}mode={r.mode} latency={r.latency_ms}ms{RESET}\n")
 
     summary = feedback_eval.summarize(results)
     print(f"{BOLD}--- summary over {summary['total']} samples ---{RESET}")
     print(f"Sentiment accuracy:  {summary['sentiment_accuracy']}%")
     print(f"Actionable accuracy: {summary['actionable_accuracy']}%")
-    print(f"Theme accuracy:      {summary['theme_accuracy']}%")
+    print(f"Category accuracy:   {summary['category_accuracy']}%")
     print(f"All three correct:   {summary['all_three_correct']}%")
 
 

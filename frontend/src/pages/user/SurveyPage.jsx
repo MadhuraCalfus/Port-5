@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Loader2, MessageSquareText, Send, Star } from "lucide-react";
 import { api } from "../../api";
 import { Button, Card } from "../../components/primitives";
-import { PendingSurveyNudge } from "../../components/PendingSurveyNudge";
 
 const RATING_LABELS = { 1: "Very unhappy", 2: "Unhappy", 3: "Okay", 4: "Happy", 5: "Very happy" };
 
@@ -98,8 +97,6 @@ export function SurveyPage() {
           </>
         )}
       </Card>
-
-      <PendingSurveyNudge />
     </div>
   );
 }

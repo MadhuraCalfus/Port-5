@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { PlusCircle, Sparkles, Star, Ticket } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
-import { useTheme } from "../../hooks/useTheme";
+import { usePendingSurveys } from "../../hooks/usePendingSurveys";
 import { Header } from "../../components/Header";
 import { MegaTabs } from "../../components/MegaTabs";
+import { Toast } from "../../components/primitives";
 import { NewTicketPage } from "./NewTicketPage";
 import { MyTicketsPage } from "./MyTicketsPage";
 import { MyResolvedIssuesPage } from "./MyResolvedIssuesPage";
@@ -26,8 +27,14 @@ export function UserDashboard() {
   const [megaTab, setMegaTab] = useState("mission");
   const [tab, setTab] = useState("new");
   const [reloadKey, setReloadKey] = useState(0);
-  const { theme, toggle } = useTheme();
   const { auth, logout } = useAuth();
+  const { pending, newSurvey, refresh, markAllSeen } = usePendingSurveys();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  function openSurveysFromToast() {
+    setMenuOpen(true);
+    markAllSeen();
+  }
 
   return (
     <div className="app-backdrop min-h-screen">
@@ -39,12 +46,16 @@ export function UserDashboard() {
             tabs={TABS}
             tab={tab}
             onTab={setTab}
-            theme={theme}
-            onToggleTheme={toggle}
-            userLabel={`${auth.name} · customer`}
+            userName={auth.name}
+            roleLabel="Customer"
             onLogout={logout}
+            pendingSurveys={pending}
+            onSurveysViewed={markAllSeen}
+            onSurveyAnswered={refresh}
+            menuOpen={menuOpen}
+            onMenuOpenChange={setMenuOpen}
           />
-          <main className="mx-auto max-w-6xl px-4 py-8">
+          <main className="container-app px-4 py-8">
             {tab === "new" && (
               <NewTicketPage
                 onSubmitted={() => {
@@ -63,15 +74,23 @@ export function UserDashboard() {
       {megaTab === "nykaa-pulse" && (
         <>
           <Header
-            theme={theme}
-            onToggleTheme={toggle}
-            userLabel={`${auth.name} · customer`}
+            userName={auth.name}
+            roleLabel="Customer"
             onLogout={logout}
+            pendingSurveys={pending}
+            onSurveysViewed={markAllSeen}
+            onSurveyAnswered={refresh}
+            menuOpen={menuOpen}
+            onMenuOpenChange={setMenuOpen}
           />
-          <main className="mx-auto max-w-[90rem] px-4 py-8">
+          <main className="container-app px-4 py-8">
             <NykaaCatalogPage />
           </main>
         </>
+      )}
+
+      {newSurvey && !menuOpen && (
+        <Toast message={`New survey received: "${newSurvey.title}" — tap to answer`} onClick={openSurveysFromToast} />
       )}
     </div>
   );

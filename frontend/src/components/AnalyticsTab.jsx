@@ -4,6 +4,7 @@ import { FileDown, RefreshCw } from "lucide-react";
 import { api } from "../api";
 import { generateAnalyticsPdf } from "../reportPdf";
 import { Card } from "./primitives";
+import { PeriodPicker, usePeriodPicker } from "./PeriodPicker";
 
 const PRIORITY_COLORS = { High: "#c0392b", Medium: "#b8860b", Low: "#2f8f5b" };
 const STATUS_COLORS = { New: "#64748b", Routed: "#3d6b96", "In Progress": "#b8860b", Resolved: "#2f8f5b" };
@@ -34,11 +35,12 @@ function toOrderedChartData(breakdown, order, labels) {
 export function AnalyticsTab() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const picker = usePeriodPicker();
 
   async function load() {
     setLoading(true);
     try {
-      setData(await api.analytics());
+      setData(await api.analytics(picker.periodType, picker.periodKey));
     } finally {
       setLoading(false);
     }
@@ -46,19 +48,49 @@ export function AnalyticsTab() {
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picker.periodType, picker.periodKey]);
+
+  const header = (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <h2 className="font-display text-lg font-semibold">Analytics</h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <PeriodPicker picker={picker} />
+        {data && (
+          <button
+            onClick={() => generateAnalyticsPdf(data)}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
+          >
+            <FileDown size={13} /> Export PDF
+          </button>
+        )}
+        <button
+          onClick={load}
+          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
+        >
+          <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
+        </button>
+      </div>
+    </div>
+  );
 
   if (!data) {
     return (
-      <Card className="p-8 text-center text-sm text-ink/50 dark:text-ink-dark/50">Loading analytics...</Card>
+      <div className="space-y-6">
+        {header}
+        <Card className="p-8 text-center text-sm text-ink/50 dark:text-ink-dark/50">Loading analytics...</Card>
+      </div>
     );
   }
 
   if (data.total_tickets === 0 && data.self_resolved_count === 0) {
     return (
-      <Card className="p-8 text-center text-sm text-ink/50 dark:text-ink-dark/50">
-        No tickets routed yet — try the "Route a Ticket" or "Demo" tab first, then come back here.
-      </Card>
+      <div className="space-y-6">
+        {header}
+        <Card className="p-8 text-center text-sm text-ink/50 dark:text-ink-dark/50">
+          No tickets routed yet for this period — try a different period, or the "Route a Ticket"/"Demo" tab first.
+        </Card>
+      </div>
     );
   }
 
@@ -69,23 +101,7 @@ export function AnalyticsTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="font-display text-lg font-semibold">Analytics</h2>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => generateAnalyticsPdf(data)}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
-          >
-            <FileDown size={13} /> Export PDF
-          </button>
-          <button
-            onClick={load}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
-          >
-            <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
-          </button>
-        </div>
-      </div>
+      {header}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <StatCard label="Tickets routed" value={String(data.total_tickets)} />

@@ -3,6 +3,7 @@ import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieCh
 import { RefreshCw } from "lucide-react";
 import { api } from "../../../api";
 import { Card } from "../../../components/primitives";
+import { PeriodPicker, usePeriodPicker } from "../../../components/PeriodPicker";
 
 // Same recharts set/layout as the existing project's AnalyticsTab.jsx, over
 // np_tickets instead — no "New" status (np_tickets are born already-routed)
@@ -42,11 +43,12 @@ function StatCard({ label, value, sub, highlight }) {
 export function NykaaAnalyticsTab() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const picker = usePeriodPicker();
 
   async function load() {
     setLoading(true);
     try {
-      setData(await api.nykaaAdminAnalytics());
+      setData(await api.nykaaAdminAnalytics(picker.periodType, picker.periodKey));
     } finally {
       setLoading(false);
     }
@@ -54,17 +56,42 @@ export function NykaaAnalyticsTab() {
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picker.periodType, picker.periodKey]);
+
+  const header = (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <h2 className="font-display text-lg font-semibold">Nykaa Pulse Analytics</h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <PeriodPicker picker={picker} />
+        <button
+          onClick={load}
+          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
+        >
+          <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
+        </button>
+      </div>
+    </div>
+  );
 
   if (!data) {
-    return <Card className="p-8 text-center text-sm text-ink/50 dark:text-ink-dark/50">Loading analytics...</Card>;
+    return (
+      <div className="space-y-6">
+        {header}
+        <Card className="p-8 text-center text-sm text-ink/50 dark:text-ink-dark/50">Loading analytics...</Card>
+      </div>
+    );
   }
 
   if (data.total_tickets === 0 && data.self_resolved_count === 0) {
     return (
-      <Card className="p-8 text-center text-sm text-ink/50 dark:text-ink-dark/50">
-        No Nykaa Pulse tickets or AI-resolved chats yet — come back once customers have raised a few.
-      </Card>
+      <div className="space-y-6">
+        {header}
+        <Card className="p-8 text-center text-sm text-ink/50 dark:text-ink-dark/50">
+          No Nykaa Pulse tickets or AI-resolved chats yet for this period — try a different period, or come back
+          once customers have raised a few.
+        </Card>
+      </div>
     );
   }
 
@@ -75,15 +102,7 @@ export function NykaaAnalyticsTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="font-display text-lg font-semibold">Nykaa Pulse Analytics</h2>
-        <button
-          onClick={load}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
-        >
-          <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
-        </button>
-      </div>
+      {header}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Tickets routed" value={String(data.total_tickets)} />

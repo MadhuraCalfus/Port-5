@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { api } from "../../../api";
 import { Card } from "../../../components/primitives";
+import { NykaaPeriodDateControls, NykaaPeriodTypeToggle, useNykaaPeriodFilter } from "../../../components/NykaaPeriodToggle";
 
 function StatTile({ label, value, sub }) {
   return (
@@ -36,15 +37,22 @@ export function NykaaDeliveryFeedbackAnalyticsPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const picker = useNykaaPeriodFilter("all");
 
-  useEffect(() => {
+  function load() {
     setLoading(true);
+    setError(null);
     api
-      .nykaaPmDeliveryFeedbackAnalytics()
+      .nykaaPmDeliveryFeedbackAnalytics(picker.isAllTime ? undefined : picker.periodType, picker.periodKey)
       .then(setData)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picker.periodType, picker.periodKey]);
 
   const ratingRows = data ? [5, 4, 3, 2, 1].map((r) => ({ rating: r, count: data.rating_distribution[r] || 0 })) : [];
   const maxRating = Math.max(1, ...ratingRows.map((r) => r.count));
@@ -52,9 +60,21 @@ export function NykaaDeliveryFeedbackAnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-display text-lg font-semibold">Delivery Feedback</h2>
-        <p className="mt-1 text-sm text-ink/60 dark:text-ink-dark/60">How customers rated their delivery experience.</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <div>
+          <h2 className="font-display text-lg font-semibold">Delivery Feedback</h2>
+          <p className="mt-1 text-sm text-ink/60 dark:text-ink-dark/60">How customers rated their delivery experience.</p>
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <NykaaPeriodDateControls picker={picker} />
+          <button
+            onClick={load}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
+          >
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
+          </button>
+          <NykaaPeriodTypeToggle picker={picker} className="ml-auto" />
+        </div>
       </div>
 
       {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
@@ -70,7 +90,9 @@ export function NykaaDeliveryFeedbackAnalyticsPage() {
           )}
         </Card>
       ) : data.total === 0 ? (
-        <Card className="p-8 text-center text-sm text-ink/50 dark:text-ink-dark/50">No delivery ratings yet.</Card>
+        <Card className="p-8 text-center text-sm text-ink/50 dark:text-ink-dark/50">
+          {picker.isAllTime ? "No delivery ratings yet." : "No delivery ratings in this period."}
+        </Card>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

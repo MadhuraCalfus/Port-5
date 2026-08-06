@@ -78,7 +78,8 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  analytics: () => request("/analytics"),
+  analytics: (periodType, periodKey) =>
+    request(`/analytics${periodType ? `?period_type=${periodType}&period_key=${periodKey}` : ""}`),
 
   sampleTickets: () => request("/sample-tickets"),
 
@@ -190,11 +191,13 @@ export const api = {
 
   pmListSurveys: () => request("/pm/surveys"),
 
-  pmSurveysOverview: () => request("/pm/surveys/overview"),
+  pmSurveysOverview: (periodType, periodKey) =>
+    request(`/pm/surveys/overview${periodType ? `?period_type=${periodType}&period_key=${periodKey}` : ""}`),
 
   pmSendSurvey: (id) => request(`/pm/surveys/${id}/send`, { method: "POST" }),
 
-  pmSurveyResults: (id) => request(`/pm/surveys/${id}/results`),
+  pmSurveyResults: (id, periodType, periodKey) =>
+    request(`/pm/surveys/${id}/results${periodType ? `?period_type=${periodType}&period_key=${periodKey}` : ""}`),
 
   // ---- customer: answering custom surveys ----
   pendingSurveys: () => request("/surveys/pending"),
@@ -240,6 +243,15 @@ export const api = {
   // Phase 4 "ask the reviews" — grounded Q&A over one product's published reviews.
   nykaaAskReviews: (productId, question) =>
     request(`/nykaa/catalog/products/${productId}/ask`, { method: "POST", body: JSON.stringify({ question }) }),
+
+  // PM Analytics chatbot — free-text question over feedback/reviews/tickets,
+  // answered via a guardrailed generated SQL query (backend nykaa_chat_sql.py).
+  nykaaAnalyticsChat: (question) =>
+    request(`/nykaa/pm/analytics-chat`, { method: "POST", body: JSON.stringify({ question }) }),
+
+  // "Didn't find what you're looking for?" follow-up — other products in
+  // the same subcategory, ranked by rating.
+  nykaaProductAlternatives: (productId) => request(`/nykaa/catalog/products/${productId}/alternatives`),
 
   // Beauty Portfolio — published reviews for one product, each tagged with
   // the reviewer's current skin_type/hair_type (nullable). Same lazy-fetch-
@@ -327,7 +339,8 @@ export const api = {
 
   nykaaAdminListTickets: () => request("/nykaa/admin/tickets"),
 
-  nykaaAdminAnalytics: () => request("/nykaa/admin/analytics"),
+  nykaaAdminAnalytics: (periodType, periodKey) =>
+    request(`/nykaa/admin/analytics${periodType ? `?period_type=${periodType}&period_key=${periodKey}` : ""}`),
 
   nykaaDownloadTicketReport: (ticketId) => downloadFile(`/nykaa/admin/tickets/${ticketId}/report.pdf`),
 
@@ -337,7 +350,8 @@ export const api = {
   nykaaAiResolvedChatTranscript: (orderId, itemId) => request(`/nykaa/ai-resolved-chats/${orderId}/${itemId}`),
 
   // ---- nykaa pulse: pm catalog-aware analytics (Phase 3) ----
-  nykaaPmOverview: () => request("/nykaa/pm/overview"),
+  nykaaPmOverview: (periodType, periodKey) =>
+    request(`/nykaa/pm/overview${periodType ? `?period_type=${periodType}&period_key=${periodKey}` : ""}`),
 
   nykaaPmFeedback: () => request("/nykaa/pm/feedback"),
 
@@ -345,9 +359,11 @@ export const api = {
 
   nykaaPmAppFeedback: () => request("/nykaa/pm/app-feedback"),
 
-  nykaaPmAppFeedbackAnalytics: () => request("/nykaa/pm/app-feedback/analytics"),
+  nykaaPmAppFeedbackAnalytics: (periodType, periodKey) =>
+    request(`/nykaa/pm/app-feedback/analytics${periodType ? `?period_type=${periodType}&period_key=${periodKey}` : ""}`),
 
-  nykaaPmDeliveryFeedbackAnalytics: () => request("/nykaa/pm/delivery-feedback/analytics"),
+  nykaaPmDeliveryFeedbackAnalytics: (periodType, periodKey) =>
+    request(`/nykaa/pm/delivery-feedback/analytics${periodType ? `?period_type=${periodType}&period_key=${periodKey}` : ""}`),
 
   nykaaPmBrandBreakdown: (periodType = "monthly", periodKey) =>
     request(`/nykaa/pm/brand-breakdown?period_type=${periodType}${periodKey ? `&period_key=${periodKey}` : ""}`),

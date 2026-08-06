@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, Search } from "lucide-react";
 import { api } from "../../../api";
 import { Card } from "../../../components/primitives";
-import { MONTHS, dayKey, daysInMonth, isoWeekKey, mondayOfIsoWeek, weeksInMonth, yearOptions } from "../../../periodNav";
+import { NykaaPeriodDateControls, NykaaPeriodTypeToggle, useNykaaPeriodFilter } from "../../../components/NykaaPeriodToggle";
 
 // The PM's raw, fully-detailed feedback list for Nykaa Pulse — the
 // Overview/Analytics/Weekly Report tabs are all aggregates; this is the one
@@ -11,14 +11,6 @@ import { MONTHS, dayKey, daysInMonth, isoWeekKey, mondayOfIsoWeek, weeksInMonth,
 // narrow to a period. Mirrors the Mission side's ImportFeedbackPage.jsx, but
 // fetches everything in one call (there's no per-period Nykaa endpoint) and
 // buckets by period client-side instead.
-const PERIOD_TYPES = [
-  { id: "all", label: "All time" },
-  { id: "daily", label: "Daily" },
-  { id: "weekly", label: "Weekly" },
-  { id: "monthly", label: "Monthly" },
-  { id: "yearly", label: "Yearly" },
-];
-
 const SENTIMENT_TABS = [
   { id: "all", label: "All sentiment" },
   { id: "positive", label: "Positive" },
@@ -45,24 +37,6 @@ const URGENCY_STYLES = {
   Low: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
 };
 
-// [start, end) for whatever period is currently selected.
-function periodRange(periodType, { year, month, weekKey, dayKey: day }) {
-  if (periodType === "daily") {
-    const [y, m, d] = day.split("-").map(Number);
-    return [new Date(y, m - 1, d), new Date(y, m - 1, d + 1)];
-  }
-  if (periodType === "weekly") {
-    const [isoYearStr, weekStr] = weekKey.split("-W");
-    const monday = mondayOfIsoWeek(Number(isoYearStr), Number(weekStr));
-    const start = new Date(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate());
-    const end = new Date(start);
-    end.setDate(end.getDate() + 7);
-    return [start, end];
-  }
-  if (periodType === "monthly") return [new Date(year, month - 1, 1), new Date(year, month, 1)];
-  return [new Date(year, 0, 1), new Date(year + 1, 0, 1)];
-}
-
 export function NykaaAllFeedbackPage() {
   const [items, setItems] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -71,23 +45,7 @@ export function NykaaAllFeedbackPage() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [sentimentTab, setSentimentTab] = useState("all");
-
-  const [periodType, setPeriodType] = useState("all");
-  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
-  const [selectedWeekKey, setSelectedWeekKey] = useState(() => isoWeekKey(new Date()));
-  const [selectedDayKey, setSelectedDayKey] = useState(() => dayKey(new Date()));
-
-  const yearOptionsList = useMemo(() => yearOptions(), []);
-  const weekOptions = useMemo(() => weeksInMonth(selectedYear, selectedMonth), [selectedYear, selectedMonth]);
-  const dayOptions = useMemo(() => daysInMonth(selectedYear, selectedMonth), [selectedYear, selectedMonth]);
-
-  useEffect(() => {
-    if (weekOptions.length > 0 && !weekOptions.some((w) => w.key === selectedWeekKey)) setSelectedWeekKey(weekOptions[0].key);
-  }, [weekOptions, selectedWeekKey]);
-  useEffect(() => {
-    if (dayOptions.length > 0 && !dayOptions.some((d) => d.key === selectedDayKey)) setSelectedDayKey(dayOptions[0].key);
-  }, [dayOptions, selectedDayKey]);
+  const picker = useNykaaPeriodFilter("all");
 
   async function load() {
     setLoading(true);
@@ -114,13 +72,8 @@ export function NykaaAllFeedbackPage() {
   const filtered = useMemo(() => {
     if (!items) return [];
     let rows = items;
-    if (periodType !== "all") {
-      const [start, end] = periodRange(periodType, {
-        year: selectedYear,
-        month: selectedMonth,
-        weekKey: selectedWeekKey,
-        dayKey: selectedDayKey,
-      });
+    if (picker.range) {
+      const [start, end] = picker.range;
       rows = rows.filter((i) => {
         const created = new Date(i.created_at);
         return created >= start && created < end;
@@ -140,7 +93,7 @@ export function NykaaAllFeedbackPage() {
           i.product_name?.toLowerCase().includes(q),
       )
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  }, [items, periodType, selectedYear, selectedMonth, selectedWeekKey, selectedDayKey, categoryFilter, sentimentTab, search]);
+  }, [items, picker.range, categoryFilter, sentimentTab, search]);
 
   return (
     <div className="space-y-6">
@@ -150,80 +103,26 @@ export function NykaaAllFeedbackPage() {
       </h2>
 
       <Card className="p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="grid grid-cols-5 gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] p-1">
-              {PERIOD_TYPES.map(({ id, label }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setPeriodType(id)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                    periodType === id
-                      ? "bg-surface dark:bg-surface-dark text-brand dark:text-brand-dim shadow-sm"
-                      : "text-ink/50 dark:text-ink-dark/50 hover:text-ink dark:hover:text-ink-dark"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {periodType !== "all" && (
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="rounded-lg border border-black/10 dark:border-white/15 bg-transparent px-2 py-1.5 text-xs text-ink dark:text-ink-dark"
-              >
-                {yearOptionsList.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {(periodType === "monthly" || periodType === "weekly" || periodType === "daily") && (
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                className="rounded-lg border border-black/10 dark:border-white/15 bg-transparent px-2 py-1.5 text-xs text-ink dark:text-ink-dark"
-              >
-                {MONTHS.map((m, i) => (
-                  <option key={m} value={i + 1}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {periodType === "weekly" && (
-              <select
-                value={selectedWeekKey}
-                onChange={(e) => setSelectedWeekKey(e.target.value)}
-                className="rounded-lg border border-black/10 dark:border-white/15 bg-transparent px-2 py-1.5 text-xs text-ink dark:text-ink-dark"
-              >
-                {weekOptions.map((w) => (
-                  <option key={w.key} value={w.key}>
-                    {w.label}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {periodType === "daily" && (
-              <select
-                value={selectedDayKey}
-                onChange={(e) => setSelectedDayKey(e.target.value)}
-                className="rounded-lg border border-black/10 dark:border-white/15 bg-transparent px-2 py-1.5 text-xs text-ink dark:text-ink-dark"
-              >
-                {dayOptions.map((d) => (
-                  <option key={d.key} value={d.key}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-            )}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1.5 rounded-lg border border-black/10 dark:border-white/15 px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50">
+              <Search size={13} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search text, brand, product, category..."
+                className="w-48 bg-transparent text-xs text-ink dark:text-ink-dark placeholder:text-ink/40 dark:placeholder:text-ink-dark/40 outline-none"
+              />
+            </label>
+            <button
+              onClick={load}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
+            >
+              {loading ? <Loader2 size={13} className="animate-spin" /> : null} Refresh
+            </button>
+          </div>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <NykaaPeriodDateControls picker={picker} />
 
             <select
               value={categoryFilter}
@@ -249,23 +148,8 @@ export function NykaaAllFeedbackPage() {
                 </option>
               ))}
             </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 rounded-lg border border-black/10 dark:border-white/15 px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50">
-              <Search size={13} />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search text, brand, product, category..."
-                className="w-48 bg-transparent text-xs text-ink dark:text-ink-dark placeholder:text-ink/40 dark:placeholder:text-ink-dark/40 outline-none"
-              />
-            </label>
-            <button
-              onClick={load}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10"
-            >
-              {loading ? <Loader2 size={13} className="animate-spin" /> : null} Refresh
-            </button>
+
+            <NykaaPeriodTypeToggle picker={picker} className="ml-auto" />
           </div>
         </div>
 

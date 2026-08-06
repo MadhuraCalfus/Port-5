@@ -16,7 +16,22 @@ type that json.loads()'s the JSON columns.
 """
 import json
 
+from .insights import _period_bounds
 from .store import _conn, _existing_columns, _now
+
+
+def _period_condition(date_column: str, period_type: str | None, period_key: str | None) -> tuple[str, tuple]:
+    """A `LEFT(date_column, 10) BETWEEN %s AND %s` condition (no WHERE/AND
+    keyword — the caller combines it) scoping `date_column` to a period;
+    empty string + no params for all-time (both None), same convention as
+    nykaa_analytics._within_period. LEFT(..., 10) compares the calendar date
+    only, so a TEXT timestamp like the one delivery_rating's period is
+    compared against still matches its own day."""
+    if not period_type or not period_key:
+        return "", ()
+    start, end = _period_bounds(period_type, period_key)
+    return f"LEFT({date_column}, 10) BETWEEN %s AND %s", (start, end)
+
 
 _NP_CATEGORIES_SCHEMA = """
     CREATE TABLE IF NOT EXISTS np_categories (
@@ -562,6 +577,22 @@ def list_recommended_products(section: str, profile: dict, limit: int = 8) -> li
         if not rows:
             sql = _PRODUCT_LIST_SQL + " WHERE c.name = %s" + _AVG_RATING_ORDER
             rows = conn.execute(sql, (category_name, limit)).fetchall()
+        return [_product_row_to_dict(r) for r in rows]
+
+
+def list_alternative_products(product_id: int, limit: int = 4) -> list[dict]:
+    """Other products in the same subcategory as `product_id` (excluding
+    itself), ranked by average customer rating — the "didn't find what
+    you're looking for? here are some other options" follow-up on the
+    product Q&A panel. Same building blocks as list_recommended_products
+    (_PRODUCT_LIST_SQL + _AVG_RATING_ORDER), just scoped by category instead
+    of a saved Beauty Portfolio."""
+    with _conn() as conn:
+        product = conn.execute("SELECT subcategory_id FROM np_products WHERE id = %s", (product_id,)).fetchone()
+        if not product:
+            return []
+        sql = _PRODUCT_LIST_SQL + " WHERE p.subcategory_id = %s AND p.id != %s" + _AVG_RATING_ORDER
+        rows = conn.execute(sql, (product["subcategory_id"], product_id, limit)).fetchall()
         return [_product_row_to_dict(r) for r in rows]
 
 
@@ -1260,21 +1291,23 @@ def list_app_feedback(limit: int = 200) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def compute_app_feedback_breakdown() -> dict:
+def compute_app_feedback_breakdown(period_type: str | None = None, period_key: str | None = None) -> dict:
     """Aggregate-only view of np_app_feedback for the PM's App Feedback tab
     — rating distribution + category counts, no raw feedback text. A
     submission can now name more than one category (categories_json), so
     counting happens in Python (one tally per category named, not per row)
     rather than a SQL GROUP BY — older rows with no categories_json fall
     back to their single `category` column."""
+    cond, params = _period_condition("created_at", period_type, period_key)
+    where = f" WHERE {cond}" if cond else ""
     with _conn() as conn:
         overall = conn.execute(
-            "SELECT COUNT(*) AS n, AVG(rating) AS avg_rating FROM np_app_feedback"
+            f"SELECT COUNT(*) AS n, AVG(rating) AS avg_rating FROM np_app_feedback{where}", params
         ).fetchone()
         by_rating = conn.execute(
-            "SELECT rating, COUNT(*) AS n FROM np_app_feedback GROUP BY rating ORDER BY rating"
+            f"SELECT rating, COUNT(*) AS n FROM np_app_feedback{where} GROUP BY rating ORDER BY rating", params
         ).fetchall()
-        rows = conn.execute("SELECT category, categories_json FROM np_app_feedback").fetchall()
+        rows = conn.execute(f"SELECT category, categories_json FROM np_app_feedback{where}", params).fetchall()
 
         category_counts: dict[str, int] = {}
         for r in rows:
@@ -1293,19 +1326,26 @@ def compute_app_feedback_breakdown() -> dict:
         }
 
 
-def compute_delivery_feedback_breakdown() -> dict:
+def compute_delivery_feedback_breakdown(period_type: str | None = None, period_key: str | None = None) -> dict:
     """Aggregate-only view of np_orders' delivery_rating/compliment for the
     PM's Delivery Feedback tab — rating distribution + how many left a
-    compliment, no raw compliment text."""
+    compliment, no raw compliment text. Scoped by placed_at, same as the
+    Overview tab's order stats — there's no separate "delivery feedback
+    submitted at" timestamp to anchor on instead."""
+    cond, params = _period_condition("placed_at", period_type, period_key)
+    where = f" WHERE {cond}" if cond else ""
+    extra = f" AND {cond}" if cond else ""
     with _conn() as conn:
         overall = conn.execute(
             "SELECT COUNT(delivery_rating) AS n, AVG(delivery_rating) AS avg_rating, "
             "COUNT(*) FILTER (WHERE delivery_compliment IS NOT NULL AND delivery_compliment != '') AS with_compliment "
-            "FROM np_orders"
+            f"FROM np_orders{where}",
+            params,
         ).fetchone()
         by_rating = conn.execute(
             "SELECT delivery_rating AS rating, COUNT(*) AS n FROM np_orders "
-            "WHERE delivery_rating IS NOT NULL GROUP BY delivery_rating ORDER BY delivery_rating"
+            f"WHERE delivery_rating IS NOT NULL{extra} GROUP BY delivery_rating ORDER BY delivery_rating",
+            params,
         ).fetchall()
         return {
             "total": overall["n"],
@@ -1317,16 +1357,19 @@ def compute_delivery_feedback_breakdown() -> dict:
 
 # ---- PM analytics (Phase 3) ---------------------------------------------------
 
-def list_review_feedback_with_catalog() -> list[dict]:
+def list_review_feedback_with_catalog(period_type: str | None = None, period_key: str | None = None) -> list[dict]:
     """Every np_feedback_items row for a Nykaa Pulse review, joined with which
     brand/catalog-category/product it's actually about. np_feedback_items
     itself has no notion of the catalog (it only knows feedback_ai's
     classification `category`) — this is the one place that bridges the
     two, so nykaa_insights.py can hand insights.py/narrative_ai.py rows
     shaped exactly like theirs, just relabeled by brand or catalog-category
-    instead of feedback category."""
+    instead of feedback category. period_type/period_key (both None means
+    all-time, the default every other caller relies on) scope to f.created_at."""
+    cond, params = _period_condition("f.created_at", period_type, period_key)
+    where = f" WHERE {cond}" if cond else ""
     with _conn() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT f.source_type, f.source_ref, f.user_id, f.text, f.sentiment_label, f.sentiment_score,
                    f.category, f.theme, f.urgency_score, f.is_actionable_ticket, f.rating, f.created_at,
                    b.name AS brand, c.name AS catalog_category, sc.name AS catalog_subcategory, p.name AS product_name
@@ -1336,22 +1379,26 @@ def list_review_feedback_with_catalog() -> list[dict]:
             JOIN np_brands b ON b.id = p.brand_id
             JOIN np_categories c ON c.id = p.category_id
             JOIN np_subcategories sc ON sc.id = p.subcategory_id
-        """).fetchall()
+            {where}
+        """, params).fetchall()
         return [dict(r) for r in rows]
 
 
-def compute_order_funnel() -> dict:
+def compute_order_funnel(period_type: str | None = None, period_key: str | None = None) -> dict:
     """Order → reviewed → photo-attached → published, the drop-off-step
     visibility the teardown flagged as missing from Nykaa's own PM view."""
+    cond, params = _period_condition("created_at", period_type, period_key)
+    where = f" WHERE {cond}" if cond else ""
     with _conn() as conn:
-        row = conn.execute("""
+        row = conn.execute(f"""
             SELECT
                 COUNT(*) AS total_items,
                 COUNT(*) FILTER (WHERE rating IS NOT NULL OR review_title IS NOT NULL OR review_description IS NOT NULL) AS reviewed_items,
                 COUNT(*) FILTER (WHERE review_photo_data IS NOT NULL) AS items_with_photo,
                 COUNT(*) FILTER (WHERE review_status = 'published') AS published_items
             FROM np_order_items
-        """).fetchone()
+            {where}
+        """, params).fetchone()
         return dict(row)
 
 
@@ -1381,24 +1428,31 @@ def compute_product_rollup(limit: int = 50) -> list[dict]:
         ]
 
 
-def compute_catalog_overview() -> dict:
+def compute_catalog_overview(period_type: str | None = None, period_key: str | None = None) -> dict:
     """Headline stats for the PM's Nykaa Pulse Overview sub-tab — order
     volume, review conversion, delivery satisfaction — none of which
     insights.py can compute since it only sees feedback_items, not
-    orders/order_items."""
+    orders/order_items. Orders/GMV/delivery scope to placed_at; order-item
+    stats (ratings, ticket links) scope to their own created_at."""
+    orders_cond, orders_params = _period_condition("placed_at", period_type, period_key)
+    orders_where = f" WHERE {orders_cond}" if orders_cond else ""
+    items_cond, items_params = _period_condition("created_at", period_type, period_key)
+    items_where = f" WHERE {items_cond}" if items_cond else ""
     with _conn() as conn:
-        orders = conn.execute("SELECT COUNT(*) AS n, COALESCE(SUM(total_amount), 0) AS gmv FROM np_orders").fetchone()
+        orders = conn.execute(f"SELECT COUNT(*) AS n, COALESCE(SUM(total_amount), 0) AS gmv FROM np_orders{orders_where}", orders_params).fetchone()
         delivery = conn.execute(
-            "SELECT AVG(delivery_rating) AS avg_delivery_rating, COUNT(delivery_rating) AS delivery_rated_count FROM np_orders"
+            f"SELECT AVG(delivery_rating) AS avg_delivery_rating, COUNT(delivery_rating) AS delivery_rated_count FROM np_orders{orders_where}",
+            orders_params,
         ).fetchone()
-        items = conn.execute("""
+        items = conn.execute(f"""
             SELECT
                 COUNT(*) AS total_items,
                 AVG(rating) FILTER (WHERE rating IS NOT NULL) AS avg_rating,
                 COUNT(rating) AS rated_count,
                 COUNT(*) FILTER (WHERE linked_ticket_id IS NOT NULL) AS auto_or_manual_ticket_count
             FROM np_order_items
-        """).fetchone()
+            {items_where}
+        """, items_params).fetchone()
         return {
             "total_orders": orders["n"],
             "total_gmv_inr": float(orders["gmv"]),

@@ -8,6 +8,7 @@ compute_analytics() don't have a meaningful analog and aren't reproduced.
 from collections import Counter
 
 from . import nykaa_store as npstore
+from .insights import _period_bounds
 
 
 def _bucket(rows: list[dict], field: str) -> dict[str, int]:
@@ -19,10 +20,22 @@ def _timeline(rows: list[dict]) -> list[dict]:
     return [{"date": date, "count": counts[date]} for date in sorted(counts)]
 
 
-def compute_ticket_analytics() -> dict:
-    rows = npstore.list_all_np_tickets()
+def _within_period(rows: list[dict], period_type: str | None, period_key: str | None, date_field: str = "created_at") -> list[dict]:
+    """Both None (the default) means all-time, same convention as
+    analytics.py's own _within_period."""
+    if not period_type or not period_key:
+        return rows
+    start, end = _period_bounds(period_type, period_key)
+    return [r for r in rows if r.get(date_field) and str(r[date_field])[:10] >= start and str(r[date_field])[:10] <= end]
+
+
+def compute_ticket_analytics(period_type: str | None = None, period_key: str | None = None) -> dict:
+    rows = _within_period(npstore.list_all_np_tickets(), period_type, period_key)
+    # AI-resolved chats key their timestamp as started_at rather than
+    # created_at (grouped-conversation summary, not a single row insert).
+    self_resolved_rows = _within_period(npstore.list_ai_resolved_chats(), period_type, period_key, date_field="started_at")
     total = len(rows)
-    self_resolved_count = len(npstore.list_ai_resolved_chats())
+    self_resolved_count = len(self_resolved_rows)
 
     if total == 0 and self_resolved_count == 0:
         return {
