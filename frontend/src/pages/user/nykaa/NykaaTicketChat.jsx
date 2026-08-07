@@ -106,6 +106,12 @@ function ChatBubble({ mine, name, text, attachmentName, onOpenAttachment }) {
 export function useTicketChat({ order, item, onTicketRaised }) {
   const alreadyEscalated = Boolean(item.linked_ticket_id);
   const [phase, setPhase] = useState(alreadyEscalated ? "escalated" : "chat");
+  // Tracks the real ticket id once one exists. `item` is a snapshot handed
+  // in by the parent when this chat was opened — it's never refreshed while
+  // the chat stays open, so `item.linked_ticket_id` would still read null
+  // right after this chat's own escalation. Keeping the id here instead of
+  // re-reading the stale prop is what every ticket-scoped call below relies on.
+  const [ticketId, setTicketId] = useState(item.linked_ticket_id);
   const [messages, setMessages] = useState([]); // bot-phase turns, while phase === "chat"
   const [historyLoading, setHistoryLoading] = useState(!alreadyEscalated);
   const [thread, setThread] = useState(null); // live np_ticket_comments, once escalated
@@ -127,15 +133,15 @@ export function useTicketChat({ order, item, onTicketRaised }) {
 
   const bottomRef = useRef(null);
 
-  async function loadThread(ticketId) {
+  async function loadThread(id) {
     if (thread === null) setThreadLoading(true);
     try {
-      const r = await api.nykaaTicketComments(ticketId);
+      const r = await api.nykaaTicketComments(id);
       setThread(r.comments);
       setMessagingOpen(r.messaging_open);
       setTicketStatus(r.status);
       setCsatRating(r.csat_rating);
-      api.nykaaMarkTicketCommentsRead(ticketId).catch(() => {});
+      api.nykaaMarkTicketCommentsRead(id).catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -148,7 +154,7 @@ export function useTicketChat({ order, item, onTicketRaised }) {
     setCsatSubmitting(true);
     setError(null);
     try {
-      await api.nykaaSubmitCsat(item.linked_ticket_id, csatDraft, csatComment.trim() || null);
+      await api.nykaaSubmitCsat(ticketId, csatDraft, csatComment.trim() || null);
       setCsatRating(csatDraft);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -179,7 +185,7 @@ export function useTicketChat({ order, item, onTicketRaised }) {
 
   useEffect(() => {
     if (alreadyEscalated) {
-      loadThread(item.linked_ticket_id);
+      loadThread(ticketId);
       return;
     }
     loadBotHistory().finally(() => setHistoryLoading(false));
@@ -197,7 +203,7 @@ export function useTicketChat({ order, item, onTicketRaised }) {
     setError(null);
     try {
       if (phase === "escalated") {
-        await loadThread(item.linked_ticket_id);
+        await loadThread(ticketId);
       } else {
         await loadBotHistory();
       }
@@ -205,16 +211,6 @@ export function useTicketChat({ order, item, onTicketRaised }) {
       setSyncing(false);
     }
   }
-
-  // Auto-sync — once a ticket is escalated (waiting for pickup, or already
-  // being worked by a team member), poll for updates in the background
-  // instead of making the customer click a Sync button.
-  useEffect(() => {
-    if (phase !== "escalated") return;
-    const id = setInterval(sync, 8000);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -236,11 +232,12 @@ export function useTicketChat({ order, item, onTicketRaised }) {
         } else {
           onTicketRaised?.(outcome.ticket);
           setPhase("escalated");
+          setTicketId(outcome.ticket.id);
           await loadThread(outcome.ticket.id);
         }
       } else {
-        await api.nykaaPostTicketComment(item.linked_ticket_id, text);
-        await loadThread(item.linked_ticket_id);
+        await api.nykaaPostTicketComment(ticketId, text);
+        await loadThread(ticketId);
       }
     } catch (e) {
       setMessages((m) => m.filter((msg) => msg.role !== "typing"));
@@ -260,8 +257,8 @@ export function useTicketChat({ order, item, onTicketRaised }) {
     setError(null);
     try {
       if (phase === "escalated") {
-        await api.nykaaUploadTicketAttachment(item.linked_ticket_id, file);
-        await loadThread(item.linked_ticket_id);
+        await api.nykaaUploadTicketAttachment(ticketId, file);
+        await loadThread(ticketId);
       } else {
         await api.nykaaUploadChatAttachment(order.id, item.id, file);
         await loadBotHistory();
@@ -277,7 +274,7 @@ export function useTicketChat({ order, item, onTicketRaised }) {
     try {
       const blob =
         phase === "escalated"
-          ? await api.nykaaDownloadTicketAttachment(item.linked_ticket_id, entry.id)
+          ? await api.nykaaDownloadTicketAttachment(ticketId, entry.id)
           : await api.nykaaDownloadChatAttachment(order.id, item.id, entry.id);
       downloadBlob(blob, entry.attachment_name || entry.attachmentName);
     } catch (e) {
@@ -335,6 +332,7 @@ export function TicketChatBody({ order, item, chat }) {
     sending,
     uploading,
     syncing,
+    sync,
     error,
     send,
     uploadAttachment,
@@ -359,9 +357,15 @@ export function TicketChatBody({ order, item, chat }) {
   return (
     <>
       {phase === "escalated" && (
-        <div className="flex items-center justify-end gap-1.5 px-2 py-1 text-[11px] text-ink/40 dark:text-ink-dark/40">
-          <RefreshCw size={11} className={syncing ? "animate-spin" : ""} />
-          {syncing ? "Checking for updates..." : "Auto-syncing"}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={sync}
+            disabled={syncing}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] text-ink/50 dark:text-ink-dark/50 hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-40"
+          >
+            <RefreshCw size={12} className={syncing ? "animate-spin" : ""} /> Sync
+          </button>
         </div>
       )}
       <div className="thin-scroll flex max-h-[420px] min-h-[200px] flex-col gap-3 overflow-y-auto overscroll-contain pr-1">

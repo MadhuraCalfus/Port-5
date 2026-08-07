@@ -28,7 +28,14 @@ CATEGORY_TEAM_MAP: dict[Category, Team] = {
 _KEYWORDS: dict[Category, list[str]] = {
     Category.ORDER_ISSUE: ["hasn't arrived", "has not arrived", "never received", "not delivered",
                             "delivery delay", "delayed", "wrong item", "wrong product shipped",
-                            "package lost", "lost my package", "cancel my order", "non-delivery"],
+                            "package lost", "lost my package", "cancel my order", "non-delivery",
+                            "order delayed", "delivery delayed", "late delivery", "package delayed",
+                            "order not delivered", "package not delivered", "delivery not received",
+                            "where is my order", "track my order", "tracking not updated",
+                            "out for delivery for days", "missed delivery",
+                            "delivery partner issue", "courier issue",
+                            "order stuck", "shipment stuck", "lost package",
+                            "delivered to wrong address", "wrong delivery", "missing package"],
     Category.PAYMENTS_REFUNDS: ["charged twice", "charged", "double charged", "refund", "invoice",
                                  "billing", "payment failed", "coupon", "discount code", "wallet",
                                  "cashback", "price"],
@@ -44,6 +51,16 @@ _KEYWORDS: dict[Category, list[str]] = {
                                "reset my password", "login", "log in", "sign in", "account access", "otp", "mfa"],
     Category.SELLER_VENDOR_ISSUE: ["seller", "vendor", "third-party seller", "marketplace seller",
                                     "seller not responding", "seller hasn't responded"],
+    # Unclear/miscellaneous phrasing that carries no category-specific signal —
+    # kept last in this dict (GENERAL_INQUIRY is also the last Category enum
+    # member) so a tie against any specific category's keyword still resolves
+    # to that specific category, not here (see classify()'s max() tie-break).
+    Category.GENERAL_INQUIRY: ["need help", "help me", "issue", "problem", "something went wrong",
+                                "not working properly", "not sure", "don't know",
+                                "can someone check", "please assist", "please help",
+                                "other issue", "general inquiry", "question",
+                                "complaint", "concern", "not satisfied",
+                                "escalate this", "urgent help", "customer support"],
 }
 
 _URGENT_WORDS = ["urgent", "asap", "immediately", "emergency", "right now", "critical"]
@@ -55,8 +72,16 @@ _WORRIED_WORDS = ["worried", "concerned", "concerning", "afraid", "scared", "ner
 
 
 def _score_categories(text: str) -> dict[Category, int]:
-    scores = {cat: 0 for cat in Category}
+    # GENERAL_INQUIRY is deliberately excluded here — its keywords ("help me",
+    # "issue", "problem"...) are generic filler that shows up in ordinary
+    # polite phrasing for every category, so letting it compete on count would
+    # let two throwaway words like "please help" outscore a single genuine
+    # signal like "hasn't arrived". It's only ever chosen as a last resort in
+    # classify() once no specific category matched anything.
+    scores = {cat: 0 for cat in Category if cat != Category.GENERAL_INQUIRY}
     for cat, words in _KEYWORDS.items():
+        if cat == Category.GENERAL_INQUIRY:
+            continue
         for w in words:
             if w in text:
                 scores[cat] += 1
@@ -108,7 +133,12 @@ def classify(message: str) -> BaselineOutcome:
 
     if matched == 0:
         best_cat = Category.GENERAL_INQUIRY
-        reasoning = "No keyword matches found; defaulted to General Inquiry."
+        triage_hits = [w for w in _KEYWORDS[Category.GENERAL_INQUIRY] if w in text]
+        reasoning = (
+            f"Matched keyword(s): {', '.join(triage_hits[:3])}."
+            if triage_hits
+            else "No keyword matches found; defaulted to General Inquiry."
+        )
     else:
         hit_words = [w for w in _KEYWORDS[best_cat] if w in text]
         reasoning = f"Matched keyword(s): {', '.join(hit_words[:3])}."

@@ -95,12 +95,12 @@ _HARD_TRIGGERS = [
       "tampered", "broken seal", "counterfeit", "fake product", "not genuine", "not authentic", "duplicate product"),
      Category.PRODUCT_QUALITY_SAFETY, Team.PRODUCT_QUALITY_TEAM),
 
-    (("refund", "money back", "charged twice", "overcharged", "double charged",
-      "payment failed", "payment declined", "not refunded", "unauthorized charge", "wrongly charged"),
+    (("charged twice", "overcharged", "double charged",
+      "payment failed", "payment declined", "unauthorized charge", "wrongly charged"),
      Category.PAYMENTS_REFUNDS, Team.PAYMENTS_BILLING_TEAM),
 
-    (("replace", "replacement", "return this", "return it", "wrong item", "wrong product",
-      "wrong shade", "wrong size", "exchange this", "send it back"),
+    (("refund", "money back", "not refunded", "replace", "replacement", "return this", "return it",
+      "wrong item", "wrong product", "wrong shade", "wrong size", "exchange this", "send it back"),
      Category.RETURNS_REPLACEMENTS, Team.RETURNS_REFUNDS_TEAM),
 
     # No dedicated seller/vendor team anymore — Triage is the normal

@@ -9,6 +9,24 @@ function authHeader() {
   }
 }
 
+// FastAPI error bodies are JSON (a plain `{detail: "..."}` or a Pydantic
+// validation list of `{msg: "..."}` entries) — surfacing that raw blob to
+// the user (e.g. in a chat error bubble) reads as a crash. Pull out the
+// human-readable message instead, falling back to the raw body for
+// non-JSON error responses (proxies, 502s, etc).
+function errorMessageFromBody(status, statusText, body) {
+  try {
+    const parsed = JSON.parse(body);
+    if (typeof parsed.detail === "string") return parsed.detail;
+    if (Array.isArray(parsed.detail)) {
+      return parsed.detail.map((d) => d.msg || JSON.stringify(d)).join("; ");
+    }
+  } catch {
+    // not JSON — fall through to the raw body below
+  }
+  return body || `${status} ${statusText}`;
+}
+
 async function request(path, options) {
   const res = await fetch(`/api${path}`, {
     cache: "no-store",
@@ -17,7 +35,7 @@ async function request(path, options) {
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`${res.status} ${res.statusText}: ${body}`);
+    throw new Error(errorMessageFromBody(res.status, res.statusText, body));
   }
   return res.json();
 }
@@ -30,7 +48,7 @@ async function uploadFile(path, file) {
   const res = await fetch(`/api${path}`, { method: "POST", cache: "no-store", headers: { ...authHeader() }, body: formData });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`${res.status} ${res.statusText}: ${body}`);
+    throw new Error(errorMessageFromBody(res.status, res.statusText, body));
   }
   return res.json();
 }
@@ -39,7 +57,7 @@ async function downloadFile(path) {
   const res = await fetch(`/api${path}`, { cache: "no-store", headers: { ...authHeader() } });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`${res.status} ${res.statusText}: ${body}`);
+    throw new Error(errorMessageFromBody(res.status, res.statusText, body));
   }
   return res.blob();
 }
